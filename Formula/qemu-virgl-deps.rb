@@ -14,6 +14,7 @@ class QemuVirglDeps < Formula
   depends_on "ninja" => :build
   depends_on "pkg-config" => :build
   depends_on "python@3" => :build
+  depends_on "util-macros" => :build
 
   # Runtime dependencies
   depends_on "glslang"
@@ -22,6 +23,11 @@ class QemuVirglDeps < Formula
   depends_on "libpng"
   depends_on "mesa"
   depends_on "sdl2"
+  depends_on "libxfixes"
+  depends_on "libxcb"
+  depends_on "xorgproto"
+  depends_on "libxau"
+  depends_on "libxdmcp"
 
   option "without-prebuilt-angle", "Build ANGLE from source instead of using pre-built binaries"
   option "with-opengl-core", "Use OpenGL Core backend directly without ANGLE (kjliew's approach)"
@@ -39,26 +45,16 @@ class QemuVirglDeps < Formula
     
     # Set PKG_CONFIG_PATH for nested dependencies
     ENV.append_path "PKG_CONFIG_PATH", "#{libdir}/pkgconfig"
-    
-    # Create RTLD_NEXT patch file (needed for both build types)
-    File.write("rtld_next_fix.patch", <<~EOF)
-diff --git a/test/egl_without_glx.c b/test/egl_without_glx.c
-index abcdefg..1234567 100644
---- a/test/egl_without_glx.c
-+++ b/test/egl_without_glx.c
-@@ -35,6 +35,12 @@
-#include <stdlib.h>
-#include <dlfcn.h>
-
-+/* Define RTLD_NEXT if not available (macOS) */
-+#ifndef RTLD_NEXT
-+#define RTLD_NEXT ((void *) -1)
-+#endif
-+
-#include "egl_common.h"
-
-static void *
-EOF
+    ENV.append_path "PKG_CONFIG_PATH", "#{Formula["mesa"].opt_lib}/pkgconfig"
+    ENV.append_path "PKG_CONFIG_PATH", "#{Formula["libx11"].opt_lib}/pkgconfig"
+    ENV.append_path "PKG_CONFIG_PATH", "#{Formula["libxext"].opt_lib}/pkgconfig"
+    ENV.append_path "PKG_CONFIG_PATH", "#{Formula["libxfixes"].opt_lib}/pkgconfig"
+    ENV.append_path "PKG_CONFIG_PATH", "#{Formula["libxcb"].opt_lib}/pkgconfig"
+    ENV.append_path "PKG_CONFIG_PATH", "#{Formula["libxau"].opt_lib}/pkgconfig"
+    ENV.append_path "PKG_CONFIG_PATH", "#{Formula["libxdmcp"].opt_lib}/pkgconfig"
+    ENV.append_path "PKG_CONFIG_PATH", "#{Formula["xorgproto"].opt_lib}/pkgconfig"
+    ENV.append_path "PKG_CONFIG_PATH", "#{HOMEBREW_PREFIX}/opt/xorgproto/share/pkgconfig"
+    ENV.append_path "PKG_CONFIG_PATH", "#{HOMEBREW_PREFIX}/share/pkgconfig"
     
     if build.with? "opengl-core"
       ohai "Building with OpenGL Core backend (kjliew's approach)"
@@ -71,8 +67,6 @@ EOF
       # Build libepoxy without EGL
       system "git", "clone", "https://github.com/anholt/libepoxy.git"
       cd "libepoxy" do
-        system "patch", "-p1", "-i", "#{buildpath}/rtld_next_fix.patch"
-        
         system "meson", "setup", "build", 
                "--prefix=#{prefix}",
                "--libdir=#{libdir}",
@@ -86,279 +80,272 @@ EOF
       end
       
       # Build virglrenderer with OpenGL Core backend
-        resource("virglrenderer").stage do
-          # Apply kjliew's patch
-          system "patch", "-p1", "-i", "#{buildpath}/patches/0001-Virglrenderer-on-Windows-and-macOS.patch"
-          
-          ENV["CFLAGS"] = "-I#{includedir}/epoxy"
-          ENV["LDFLAGS"] = "-L#{libdir}"
-          ENV["PKG_CONFIG_PATH"] = "#{libdir}/pkgconfig"
-          
-          system "meson", "setup", "build",
-                 "--prefix=#{prefix}",
-                 "--libdir=#{libdir}",
-                 "--includedir=#{includedir}/virgl",
-                 "-Dplatforms=gl",
-                 "-Dminigbm=disabled"
-          system "meson", "compile", "-C", "build"
-          system "meson", "install", "-C", "build"
+      resource("virglrenderer").stage do
+        # Apply kjliew's patch
+        system "patch", "-p1", "-i", "#{buildpath}/patches/0001-Virglrenderer-on-Windows-and-macOS.patch"
+        
+        ENV["CFLAGS"] = "-I#{includedir}/epoxy"
+        ENV["LDFLAGS"] = "-L#{libdir}"
+        ENV["PKG_CONFIG_PATH"] = "#{libdir}/pkgconfig"
+        
+        system "meson", "setup", "build",
+               "--prefix=#{prefix}",
+               "--libdir=#{libdir}",
+               "--includedir=#{includedir}/virgl",
+               "-Dplatforms=gl"
+        system "meson", "compile", "-C", "build"
+        system "meson", "install", "-C", "build"
+      end
+      
+    else
+      # Regular build with ANGLE
+      ohai "Building with ANGLE-based approach"
+      
+      # 1. ANGLE installation - either build from source or use pre-built binaries
+      if build.without? "prebuilt-angle"
+        # Build ANGLE from source (time-consuming but guaranteed compatibility)
+        ohai "Building ANGLE from source - this may take a long time (30+ minutes)"
+        ohai "To use pre-built binaries next time, remove the --without-prebuilt-angle flag"
+        
+        system "git", "clone", "https://chromium.googlesource.com/chromium/tools/depot_tools.git"
+        
+        # Setup the build directory for ANGLE
+        mkdir_p "source/angle"
+        mkdir_p "build/angle"
+        
+        # Clone ANGLE into the source directory
+        system "git", "clone", "https://chromium.googlesource.com/angle/angle", "source/angle"
+        
+        # Build ANGLE with depot_tools
+        ENV["DEPOT_TOOLS_UPDATE"] = "0"
+        ENV.append_path "PATH", "#{buildpath}/depot_tools"
+        
+        cd "source/angle" do
+          system "python3", "scripts/bootstrap.py"
+          system "gclient", "sync", "-D"
         end
+        
+        # Generate and build ANGLE - macOS specific configuration
+        gn_args = "is_debug=false " \
+                  "use_custom_libcxx=false " \
+                  "angle_enable_vulkan=false " \
+                  "angle_enable_metal=true " \
+                  "angle_enable_gl=true " \
+                  "angle_enable_d3d11=false " \
+                  "angle_enable_d3d9=false " \
+                  "angle_enable_d3d12=false "
+        
+        system "gn", "gen", "--args=#{gn_args}", "build/angle"
+        system "ninja", "-C", "build/angle", "libEGL", "libGLESv2"
+        
+        # Install ANGLE libraries and headers
+        cp Dir["build/angle/lib*.dylib"], libdir
+        cp_r "source/angle/include", includedir/"angle"
         
       else
-        # Regular build with ANGLE
-        ohai "Building with ANGLE-based approach"
+        # Use pre-built ANGLE libraries (faster installation)
+        angle_version = "20250315.1"
+        angle_url = "https://github.com/startergo/qemu-virgl-deps/releases/download/v#{angle_version}/angle-#{angle_version}.tar.gz"
         
-        # 1. ANGLE installation - either build from source or use pre-built binaries
-        if build.without? "prebuilt-angle"
-          # Build ANGLE from source (time-consuming but guaranteed compatibility)
-          ohai "Building ANGLE from source - this may take a long time (30+ minutes)"
-          ohai "To use pre-built binaries next time, remove the --without-prebuilt-angle flag"
-          
-          system "git", "clone", "https://chromium.googlesource.com/chromium/tools/depot_tools.git"
-          
-          # Setup the build directory for ANGLE
-          mkdir_p "source/angle"
-          mkdir_p "build/angle"
-          
-          # Clone ANGLE into the source directory
-          system "git", "clone", "https://chromium.googlesource.com/angle/angle", "source/angle"
-          
-          # Build ANGLE with depot_tools
-          ENV["DEPOT_TOOLS_UPDATE"] = "0"
-          ENV.append_path "PATH", "#{buildpath}/depot_tools"
-          
-          cd "source/angle" do
-            system "python3", "scripts/bootstrap.py"
-            system "gclient", "sync", "-D"
-          end
-          
-          # Generate and build ANGLE - macOS specific configuration
-          gn_args = "is_debug=false " \
-                    "use_custom_libcxx=false " \
-                    "angle_enable_vulkan=false " \
-                    "angle_enable_metal=true " \
-                    "angle_enable_gl=true " \
-                    "angle_enable_d3d11=false " \
-                    "angle_enable_d3d9=false " \
-                    "angle_enable_d3d12=false "
-          
-          system "gn", "gen", "--args=#{gn_args}", "build/angle"
-          system "ninja", "-C", "build/angle", "libEGL", "libGLESv2"
-          
-          # Install ANGLE libraries and headers
-          cp Dir["build/angle/lib*.dylib"], libdir
-          cp_r "source/angle/include", includedir/"angle"
-          
-        else
-          # Use pre-built ANGLE libraries (faster installation)
-          angle_version = "20250315.1"
-          angle_url = "https://github.com/startergo/qemu-virgl-deps/releases/download/v#{angle_version}/angle-#{angle_version}.tar.gz"
-          
-          ohai "Using pre-built ANGLE libraries from: #{angle_url}"
-          
-          # Download and extract pre-built ANGLE
-          mkdir_p "angle-prebuilt"
-          system "curl", "-L", angle_url, "-o", "angle-prebuilt.tar.gz"
-          system "tar", "-xzf", "angle-prebuilt.tar.gz", "-C", "angle-prebuilt", "--strip-components=1"
-          
-          # Copy libraries and headers
-          cp Dir["angle-prebuilt/lib/*.dylib"], libdir
-          mkdir_p includedir/"angle"
-          cp_r "angle-prebuilt/include/.", includedir/"angle"
-        end
+        ohai "Using pre-built ANGLE libraries from: #{angle_url}"
         
-        # Create pkgconfig files for ANGLE
-        mkdir_p "#{libdir}/pkgconfig"
-        File.write("#{libdir}/pkgconfig/egl.pc", <<~EOS)
-          prefix=#{prefix}
-          libdir=#{libdir}
-          includedir=#{includedir}/angle
-  
-          Name: EGL
-          Description: ANGLE EGL library
-          Version: 1.0.0
-          Libs: -L${libdir} -lEGL
-          Cflags: -I${includedir}
-        EOS
+        # Download and extract pre-built ANGLE
+        mkdir_p "angle-prebuilt"
+        system "curl", "-L", angle_url, "-o", "angle-prebuilt.tar.gz"
+        system "tar", "-xzf", "angle-prebuilt.tar.gz", "-C", "angle-prebuilt", "--strip-components=1"
         
-        File.write("#{libdir}/pkgconfig/glesv2.pc", <<~EOS)
-          prefix=#{prefix}
-          libdir=#{libdir}
-          includedir=#{includedir}/angle
-  
-          Name: GLESv2
-          Description: ANGLE GLESv2 library
-          Version: 1.0.0
-          Libs: -L${libdir} -lGLESv2
-          Cflags: -I${includedir}
-        EOS
-        
-        # 2. Build and install akihikodaki's libepoxy (against ANGLE)
-        system "git", "clone", "-b", "macos", "https://github.com/akihikodaki/libepoxy.git"
-        cd "libepoxy" do
-          # Ensure libepoxy uses our installed ANGLE libraries
-          ENV["CFLAGS"] = "-I#{includedir}/angle"
-          ENV["LDFLAGS"] = "-L#{libdir}"
-          ENV["EGL_CFLAGS"] = "-I#{includedir}/angle"
-          ENV["EGL_LIBS"] = "-L#{libdir} -lEGL"
-          
-          system "meson", "setup", "build", 
-                 "--prefix=#{prefix}",
-                 "--libdir=#{libdir}",
-                 "--includedir=#{includedir}/epoxy",
-                 "-Dglx=no",  # Disable GLX as we're using EGL from ANGLE
-                 "-Degl=yes"  # Explicitly enable EGL
-          system "meson", "compile", "-C", "build"
-          system "meson", "install", "-C", "build"
-        end
-  
-        # 3. Build and install virglrenderer (against both ANGLE and libepoxy)
-        resource("virglrenderer").stage do
-          # Apply akihikodaki's patches - no need for explicit checkout
-          system "git", "init"
-          system "git", "apply", "--whitespace=fix", "#{buildpath}/libepoxy/src/git.macos.patch"
-          
-          # Set environment variables to use both our ANGLE and libepoxy
-          ENV["CFLAGS"] = "-I#{includedir}/epoxy -I#{includedir}/angle"
-          ENV["LDFLAGS"] = "-L#{libdir}"
-          ENV["PKG_CONFIG_PATH"] = "#{libdir}/pkgconfig"
-          
-          system "meson", "setup", "build",
-                 "--prefix=#{prefix}",
-                 "--libdir=#{libdir}",
-                 "--includedir=#{includedir}/virgl",
-                 "-Dplatforms=egl",  # Only use EGL platform which works with ANGLE
-                 "-Dminigbm=disabled"
-          system "meson", "compile", "-C", "build"
-          system "meson", "install", "-C", "build"
-        end
+        # Copy libraries and headers
+        cp Dir["angle-prebuilt/lib/*.dylib"], libdir
+        mkdir_p includedir/"angle"
+        cp_r "angle-prebuilt/include/.", includedir/"angle"
       end
-  
-      # Download the compatibility patch and specific virgil3d patches
-      mkdir_p "patches"
-      system "curl", "-L", "https://raw.githubusercontent.com/startergo/qemu-virgl-deps/master/Patches/qemu-v06.diff", "-o", "patches/qemu-v06.diff"
-      system "curl", "-L", "https://raw.githubusercontent.com/kjliew/qemu-3dfx/refs/heads/master/virgil3d/0001-Virgil3D-with-SDL2-OpenGL.patch", "-o", "patches/0001-Virgil3D-with-SDL2-OpenGL.patch"
-  
-      # Create a helper script for applying 3dfx patches (compatible with multiple QEMU versions)
-      (bin/"apply-3dfx-patches").write <<~EOS
-        #!/bin/bash
-        
-        # Check if source directory is provided
-        if [ -z "$1" ]; then
-          echo "Error: Please specify the QEMU source directory"
-          echo "Usage: apply-3dfx-patches /path/to/qemu-src"
-          exit 1
-        fi
-        
-        QEMU_SRC="$1"
-        
-        if [ ! -d "$QEMU_SRC" ]; then
-          echo "Error: QEMU source directory not found: $QEMU_SRC"
-          exit 1
-        fi
-        
-        # Check if SDL2 is recent enough to already have virgl patches
-        SDL_VERSION=$(sdl2-config --version)
-        SDL_MAJOR=$(echo $SDL_VERSION | cut -d. -f1)
-        SDL_MINOR=$(echo $SDL_VERSION | cut -d. -f2)
-        SDL_MICRO=$(echo $SDL_VERSION | cut -d. -f3)
-        
-        # SDL 2.28.0 or newer might have the virgl patches incorporated
-        # Reference: https://github.com/libsdl-org/SDL/issues/4986
-        if [ "$SDL_MAJOR" -gt 2 ] || ([ "$SDL_MAJOR" -eq 2 ] && [ "$SDL_MINOR" -ge 28 ]); then
-          echo "Note: Your SDL2 version ($SDL_VERSION) might already include virgl patches."
-          echo "Some of the patches might not be necessary or could conflict."
-          read -p "Do you want to continue applying the patches? (y/n) " -n 1 -r
-          echo
-          if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-            echo "Patch application aborted."
-            exit 1
-          fi
-        fi
-        
-        # Check QEMU version - patches are compatible with specific versions
-        COMPATIBLE_VERSIONS=("9.2.1" "8.2.1")
-        if [ -f "$QEMU_SRC/VERSION" ]; then
-          QEMU_VERSION=$(cat "$QEMU_SRC/VERSION")
-          COMPATIBLE=false
-          for version in "${COMPATIBLE_VERSIONS[@]}"; do
-            if [ "$QEMU_VERSION" == "$version" ]; then
-              COMPATIBLE=true
-              break
-            fi
-          done
-          
-          if [ "$COMPATIBLE" != "true" ]; then
-            echo "Warning: These patches are primarily tested with QEMU versions 9.2.1, 8.2.1"
-            echo "Your QEMU version is $QEMU_VERSION"
-            echo "The patches may not apply cleanly or could cause build failures."
-            read -p "Do you want to continue anyway? (y/n) " -n 1 -r
-            echo
-            if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-              echo "Patch application aborted."
-              exit 1
-            fi
-          fi
-        else
-          echo "Warning: Could not determine QEMU version."
-          echo "These patches are primarily tested with QEMU versions 9.2.1, 8.2.1"
-          read -p "Do you want to continue anyway? (y/n) " -n 1 -r
-          echo
-          if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-            echo "Patch application aborted."
-            exit 1
-          fi
-        fi
-        
-        echo "Applying Virgil3D patches..."
-        cd "$QEMU_SRC"
-        
-        # Apply the specific patches directly from our patches directory
-        echo "Applying patch: 0001-Virgil3D-with-SDL2-OpenGL.patch"
-        git apply "#{prefix}/patches/0001-Virgil3D-with-SDL2-OpenGL.patch" || echo "Warning: Failed to apply 0001-Virgil3D-with-SDL2-OpenGL.patch"
-        
-        echo ""
-        echo "Patches applied. You can now compile QEMU with enhanced 3D support:"
-        echo "compile-qemu-virgl $QEMU_SRC"
+      
+      # Create pkgconfig files for ANGLE
+      mkdir_p "#{libdir}/pkgconfig"
+      File.write("#{libdir}/pkgconfig/egl.pc", <<~EOS)
+        prefix=#{prefix}
+        libdir=#{libdir}
+        includedir=#{includedir}/angle
+
+        Name: EGL
+        Description: ANGLE EGL library
+        Version: 1.0.0
+        Libs: -L${libdir} -lEGL
+        Cflags: -I${includedir}
       EOS
-      chmod 0755, bin/"apply-3dfx-patches"
-  
-      # Create a helper script for fetching specific QEMU version
-      (bin/"fetch-qemu-version").write <<~EOS
-        #!/bin/bash
-        
-        # Default to QEMU 9.2.1 if no version specified (most recent compatible version)
-        QEMU_VERSION="${1:-9.2.1}"
-        TARGET_DIR="${2:-source/qemu}"
-        
-        # Check if version matches X.Y.Z format
-        if ! [[ $QEMU_VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-          echo "Error: Version must be in X.Y.Z format (e.g., 9.2.1)"
+      
+      File.write("#{libdir}/pkgconfig/glesv2.pc", <<~EOS)
+        prefix=#{prefix}
+        libdir=#{libdir}
+        includedir=#{includedir}/angle
+
+        Name: GLESv2
+        Description: ANGLE GLESv2 library
+        Version: 1.0.0
+        Libs: -L${libdir} -lGLESv2
+        Cflags: -I${includedir}
+      EOS
+      
+      # 2. Build and install akihikodaki's libepoxy using the pre-patched macos branch
+      mkdir_p "source/libepoxy"
+      system "git", "-C", "source/libepoxy", "init"
+      system "git", "-C", "source/libepoxy", "fetch", "https://github.com/akihikodaki/libepoxy.git", "macos"
+      system "git", "-C", "source/libepoxy", "checkout", "FETCH_HEAD"
+
+      # Ensure libepoxy uses our installed ANGLE libraries
+      system "meson", "setup", "build/libepoxy", "source/libepoxy", 
+             "-Dc_args=-I#{includedir}/angle",
+             "-Degl=yes",
+             "-Dx11=false",
+             "--prefix=#{prefix}",
+             "--libdir=#{libdir}",
+             "--includedir=#{includedir}/epoxy"
+      system "meson", "compile", "-C", "build/libepoxy"
+      system "meson", "install", "-C", "build/libepoxy"
+    end
+
+    # 3. Build and install virglrenderer (against both ANGLE and libepoxy)
+    resource("virglrenderer").stage do
+      # Set environment variables to use both our ANGLE and libepoxy
+      ENV["CFLAGS"] = "-I#{includedir}/epoxy -I#{includedir}/angle"
+      ENV["LDFLAGS"] = "-L#{libdir}"
+      ENV["PKG_CONFIG_PATH"] = "#{libdir}/pkgconfig:#{Formula["mesa"].opt_lib}/pkgconfig:#{Formula["libx11"].opt_lib}/pkgconfig:#{Formula["libxext"].opt_lib}/pkgconfig:#{Formula["libxfixes"].opt_lib}/pkgconfig:#{Formula["libxcb"].opt_lib}/pkgconfig:#{Formula["libxau"].opt_lib}/pkgconfig:#{Formula["libxdmcp"].opt_lib}/pkgconfig:#{Formula["xorgproto"].opt_lib}/pkgconfig:#{HOMEBREW_PREFIX}/opt/xorgproto/share/pkgconfig:#{HOMEBREW_PREFIX}/share/pkgconfig"
+      
+      system "meson", "setup", "build",
+             "--prefix=#{prefix}",
+             "--libdir=#{libdir}",
+             "--includedir=#{includedir}/virgl",
+             "-Dplatforms=egl",  # Only use EGL platform which works with ANGLE
+             "-Dtests=false"     # Skip tests to avoid compilation issues
+      system "meson", "compile", "-C", "build"
+      system "meson", "install", "-C", "build"
+    end
+
+    # Download the compatibility patch and specific virgil3d patches
+    mkdir_p "patches"
+    system "curl", "-L", "https://raw.githubusercontent.com/startergo/qemu-virgl-deps/refs/heads/main/Patches/qemu-v06.diff", "-o", "patches/qemu-v06.diff"
+    system "curl", "-L", "https://raw.githubusercontent.com/kjliew/qemu-3dfx/refs/heads/master/virgil3d/0001-Virgil3D-with-SDL2-OpenGL.patch", "-o", "patches/0001-Virgil3D-with-SDL2-OpenGL.patch"
+
+    # Create a helper script for applying 3dfx patches (compatible with multiple QEMU versions)
+    (bin/"apply-3dfx-patches").write <<~EOS
+      #!/bin/bash
+      
+      # Check if source directory is provided
+      if [ -z "$1" ]; then
+        echo "Error: Please specify the QEMU source directory"
+        echo "Usage: apply-3dfx-patches /path/to/qemu-src"
+        exit 1
+      fi
+      
+      QEMU_SRC="$1"
+      
+      if [ ! -d "$QEMU_SRC" ]; then
+        echo "Error: QEMU source directory not found: $QEMU_SRC"
+        exit 1
+      fi
+      
+      # Check if SDL2 is recent enough to already have virgl patches
+      SDL_VERSION=$(sdl2-config --version)
+      SDL_MAJOR=$(echo $SDL_VERSION | cut -d. -f1)
+      SDL_MINOR=$(echo $SDL_VERSION | cut -d. -f2)
+      SDL_MICRO=$(echo $SDL_VERSION | cut -d. -f3)
+      
+      # SDL 2.28.0 or newer might have the virgl patches incorporated
+      # Reference: https://github.com/libsdl-org/SDL/issues/4986
+      if [ "$SDL_MAJOR" -gt 2 ] || ([ "$SDL_MAJOR" == 2 ] && [ "$SDL_MINOR" -ge 28 ]); then
+        echo "Note: Your SDL2 version ($SDL_VERSION) might already include virgl patches."
+        echo "Some of the patches might not be necessary or could conflict."
+        read -p "Do you want to continue applying the patches? (y/n) " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+          echo "Patch application aborted."
           exit 1
         fi
-        
-        # Verify if version is one of the recommended versions
-        RECOMMENDED_VERSIONS=("9.2.1" "8.2.1")
-        IS_RECOMMENDED=false
-        for version in "${RECOMMENDED_VERSIONS[@]}"; do
+      fi
+      
+      # Check QEMU version - patches are compatible with specific versions
+      COMPATIBLE_VERSIONS=("9.2.1" "8.2.1")
+      if [ -f "$QEMU_SRC/VERSION" ]; then
+        QEMU_VERSION=$(cat "$QEMU_SRC/VERSION")
+        COMPATIBLE=false
+        for version in "${COMPATIBLE_VERSIONS[@]}"; do
           if [ "$QEMU_VERSION" == "$version" ]; then
-            IS_RECOMMENDED=true
+            COMPATIBLE=true
             break
           fi
         done
         
-        if [ "$IS_RECOMMENDED" != "true" ]; then
-          echo "Warning: Version $QEMU_VERSION is not one of the recommended versions (9.2.1, 8.2.1)"
-          echo "The 3D patches may not apply cleanly to this version."
+        if [ "$COMPATIBLE" != "true" ]; then
+          echo "Warning: These patches are primarily tested with QEMU versions 9.2.1, 8.2.1"
+          echo "Your QEMU version is $QEMU_VERSION"
+          echo "The patches may not apply cleanly or could cause build failures."
           read -p "Do you want to continue anyway? (y/n) " -n 1 -r
           echo
           if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            echo "Patch application aborted."
             exit 1
           fi
         fi
+      else
+        echo "Warning: Could not determine QEMU version."
+        echo "These patches are primarily tested with QEMU versions 9.2.1, 8.2.1"
+        read -p "Do you want to continue anyway? (y/n) " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+          echo "Patch application aborted."
+          exit 1
+        fi
+      fi
+      
+      echo "Applying Virgil3D patches..."
+      cd "$QEMU_SRC"
+      
+      # Apply the specific patches directly from our patches directory
+      echo "Applying patch: 0001-Virgil3D-with-SDL2-OpenGL.patch"
+      git apply "#{prefix}/patches/0001-Virgil3D-with-SDL2-OpenGL.patch" || echo "Warning: Failed to apply 0001-Virgil3D-with-SDL2-OpenGL.patch"
+      
+      echo ""
+      echo "Patches applied. You can now compile QEMU with enhanced 3D support:"
+      echo "compile-qemu-virgl $QEMU_SRC"
+    EOS
+    chmod 0755, bin/"apply-3dfx-patches"
+
+    # Create a helper script for fetching specific QEMU version
+    (bin/"fetch-qemu-version").write <<~EOS
+      #!/bin/bash
+      
+      # Default to QEMU 9.2.1 if no version specified (most recent compatible version)
+      QEMU_VERSION="${1:-9.2.1}"
+      TARGET_DIR="${2:-source/qemu}"
+      
+      # Check if version matches X.Y.Z format
+      if ! [[ $QEMU_VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        echo "Error: Version must be in X.Y.Z format (e.g., 9.2.1)"
+        exit 1
+      fi      
+      
+      # Verify if version is one of the recommended versions
+      RECOMMENDED_VERSIONS=("9.2.1" "8.2.1")
+      IS_RECOMMENDED=false
+      for version in "${RECOMMENDED_VERSIONS[@]}"; do
+        if [ "$QEMU_VERSION" == "$version" ]; then
+          IS_RECOMMENDED=true
+          break
+        fi
+      done     
+      
+      if [ "$IS_RECOMMENDED" != "true" ]; then
+        echo "Warning: Version $QEMU_VERSION is not one of the recommended versions (9.2.1, 8.2.1)"
+        echo "The 3D patches may not apply cleanly to this version."
+        read -p "Do you want to continue anyway? (y/n) " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+          exit 1
+        fi
+      fi     
         
         # Create target directory if it doesn't exist
-        mkdir -p "$TARGET_DIR"
+        mkdir -p "$TARGET_DIR"        
         
         # If target is empty, clone fresh
         if [ -z "$(ls -A "$TARGET_DIR" 2>/dev/null)" ]; then
@@ -374,8 +361,8 @@ EOF
             echo "Please provide an empty or non-existent directory."
             exit 1
           fi
-        fi
-        
+        fi        
+       
         # Apply startergo's v06 patch which contains all macOS compatibility enhancements
         echo "Applying startergo's v06 compatibility patch..."
         cp "#{prefix}/patches/qemu-v06.diff" .
