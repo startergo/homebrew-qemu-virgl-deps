@@ -1,4 +1,4 @@
-# QEMU Virgl Dependencies Homebrew Tap
+# Dependencies for QEMU with Virgl 3D acceleration
 
 This tap provides a formula for installing the necessary dependencies to run QEMU with Virgl 3D acceleration, specifically for the patched QEMU branch by akihikodaki.
 
