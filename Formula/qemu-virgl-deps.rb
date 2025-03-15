@@ -2,7 +2,7 @@ class QemuVirglDeps < Formula
     desc "Dependencies for QEMU with Virgl 3D acceleration"
     homepage "https://github.com/startergo/qemu-virgl-deps"
     url "https://github.com/startergo/qemu-virgl-deps/archive/refs/tags/v20250315.1.tar.gz"
-    sha256 "PLACEHOLDER_SHA256"
+    sha256 "0019dfc4b32d63c1392aa264aed2253c1e0c2fb09216f8e2cc269bbfb8bb49b5"
     license "MIT"
     version "20250315.1" # Version based on 2025-03-15
     revision 1
