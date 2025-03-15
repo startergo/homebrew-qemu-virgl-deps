@@ -503,8 +503,8 @@ class QemuVirglDeps < Formula
           1. Install QEMU dependencies:
              $ install-qemu-deps
           
-          2. Fetch QEMU (recommended versions: 9.2.1, 8.2.1, 7.2.0, or 6.1.0):
-             $ fetch-qemu-version 9.2.1 source/qemu
+          2. Fetch QEMU (recommended versions: 9.2.1, 8.2.1):
+             $ fetch-qemu-version 8.2.1 source/qemu
           
           3. Apply 3D enhancement patches:
              $ apply-3dfx-patches source/qemu
@@ -544,17 +544,14 @@ class QemuVirglDeps < Formula
           1. Install QEMU dependencies:
              $ install-qemu-deps
           
-          2. Fetch QEMU (recommended versions: 9.2.1, 8.2.1, 7.2.0, or 6.1.0):
+          2. Fetch QEMU (recommended versions: 9.2.1, 8.2.1):
              $ fetch-qemu-version 9.2.1 source/qemu
              
              This will create a custom version with startergo's v06 patch,
              which contains all the macOS compatibility enhancements needed for virgl support.
-             The v06 patch works with QEMU 9.2.1 and possibly higher versions.
+             The v06 patch works with QEMU 9.2.1 and possibly higher versions.          
           
-          3. Apply additional 3D enhancement patches:
-             $ apply-3dfx-patches source/qemu
-          
-          4. Configure and build QEMU:
+          3. Configure and build QEMU:
              $ compile-qemu-virgl source/qemu
              $ cd source/qemu && make -j$(sysctl -n hw.ncpu)
           
