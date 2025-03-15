@@ -28,7 +28,7 @@ class QemuVirglDeps < Formula
   
     resource "virglrenderer" do
       url "https://gitlab.freedesktop.org/virgl/virglrenderer/-/archive/1.1.0/virglrenderer-1.1.0.tar.gz"
-      sha256 "PLACEHOLDER_VIRGLRENDERER_SHA256"
+      sha256 "9996b87bda2fbf515473b60f32b00ed58847da733b47053923fd2cb035a6f5a2"
     end
   
     def install
