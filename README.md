@@ -1,78 +1,124 @@
-# Dependencies for QEMU with Virgl 3D acceleration
+# QEMU Virgl Dependencies for macOS
 
-This tap provides a formula for installing the necessary dependencies to run QEMU with Virgl 3D acceleration, specifically for the patched QEMU branch by akihikodaki.
+![Version](https://img.shields.io/badge/version-20250315.1-blue)
+![Platform](https://img.shields.io/badge/platform-macOS-lightgrey)
+![License](https://img.shields.io/badge/license-MIT-green)
 
-## What This Formula Installs
+This repository provides a Homebrew formula for building and installing the dependencies required for QEMU with Virgl 3D acceleration support on macOS. It enables hardware-accelerated OpenGL in QEMU virtual machines on macOS hosts.
 
-- **ANGLE** (Almost Native Graphics Layer Engine)
-- **virglrenderer** (Virtual 3D GPU for QEMU)
-- **libepoxy** (OpenGL function pointer management library)
+Last updated: 2025-03-15
 
-These components are built and configured to work together with the patched QEMU, supporting both OpenGL and OpenGL ES.
+## Features
+
+- Native OpenGL acceleration for QEMU virtual machines on macOS
+- Support for multiple QEMU versions (9.2.1, 8.2.1)
+- Two rendering backends:
+  - ANGLE-based approach (stable, recommended)
+  - OpenGL Core backend (kjliew's approach, potentially higher performance)
+- Helper scripts for easy setup, patching, and compilation
+- Pre-built ANGLE libraries for faster installation
 
 ## Installation
 
 ```bash
-# Add the tap
-brew tap startergo/tap
+# Add the repository
+brew tap startergo/qemu-virgl-deps
 
-# Install the dependencies
+# Install with default options (ANGLE-based approach)
 brew install qemu-virgl-deps
+
+# Or install with OpenGL Core backend
+brew install qemu-virgl-deps --with-opengl-core
+
+# To build ANGLE from source (instead of using pre-built binaries)
+brew install qemu-virgl-deps --without-prebuilt-angle
 ```
 
-## Building QEMU with Virgl Support
+## Usage
 
-1. Set up the environment for building QEMU:
+### Recommended Workflow
+
+1. **Install QEMU dependencies**:
    ```bash
-   source $(brew --prefix qemu-virgl-deps)/bin/setup-qemu-virgl
+   install-qemu-deps
    ```
 
-2. When configuring QEMU, use:
+2. **Fetch QEMU source** (recommended versions: 9.2.1, 8.2.1, 7.2.0, or 6.1.0):
    ```bash
-   PKG_CONFIG_PATH=$(brew --prefix qemu-virgl-deps)/lib/qemu-virgl/pkgconfig ./configure \
-     --enable-opengl --enable-virglrenderer --with-git-submodules=ignore
+   fetch-qemu-version 9.2.1 source/qemu
+   ```
+   
+   This will create a custom version with compatibility patches applied.
+
+3. **Apply 3D enhancement patches**:
+   ```bash
+   apply-3dfx-patches source/qemu
    ```
 
-3. Build and install QEMU as usual:
+4. **Configure and build QEMU**:
    ```bash
-   make -j$(sysctl -n hw.ncpu)
-   make install
+   compile-qemu-virgl source/qemu
+   cd source/qemu && make -j$(sysctl -n hw.ncpu)
    ```
 
-## Running QEMU with Virgl
+5. **Run QEMU with Virgl acceleration**:
+   ```bash
+   qemu-virgl /path/to/qemu-system-x86_64 -display sdl,gl=es [other options]
+   ```
 
-Use the provided wrapper script to run QEMU with the correct environment:
+### Graphics Modes
 
-```bash
-qemu-virgl /path/to/qemu-system-x86_64 [other qemu options]
-```
+When running QEMU, you can choose from different rendering backends:
 
-### Graphics Mode Options
+- `gl=off` - Disable Virgil 3D GPU. Most stable but laggy.
+- `gl=core` - Enable OpenGL.framework. May be unstable with ANGLE-based build.
+- `gl=es` - Enable ANGLE. Stable and fast. (Recommended with ANGLE-based build)
 
-The formula supports three graphics modes, selectable at runtime:
+If you installed with the `--with-opengl-core` option, use `gl=core`.
 
-- **gl=off**: Disable Virgil 3D GPU (most stable but laggy)
-  ```bash
-  qemu-virgl /path/to/qemu-system-x86_64 -display sdl,gl=off
-  ```
+## Requirements
 
-- **gl=core**: Use macOS OpenGL.framework (unstable)
-  ```bash
-  qemu-virgl /path/to/qemu-system-x86_64 -display sdl,gl=core
-  ```
+- macOS 12 (Monterey) or newer
+- Homebrew
+- Git
+- Python 3
+- Xcode Command Line Tools
 
-- **gl=es**: Use ANGLE (stable and fast, recommended)
-  ```bash
-  qemu-virgl /path/to/qemu-system-x86_64 -display sdl,gl=es
-  ```
+## How It Works
 
-## Troubleshooting
+The formula builds and installs:
 
-- If you encounter rendering issues, try different gl modes
-- For performance issues, ensure 3D acceleration is enabled in the guest OS
-- For OpenGL errors, check QEMU output for specific errors related to Virgl
+1. **Standard ANGLE-based approach**:
+   - ANGLE (either pre-built or compiled from source)
+   - libepoxy (modified for macOS with EGL)
+   - virglrenderer (configured for EGL)
 
-## Acknowledgements
+2. **OpenGL Core approach** (kjliew's method):
+   - libepoxy (built without EGL)
+   - virglrenderer (configured for OpenGL Core)
+   - Patches to enable OpenGL Core support in SDL2
 
-This formula automates the installation process previously handled by the script at:
-https://gist.github.com/startergo/0d9a7425876c2b42f8b797af80fbe3d8/raw/run-arm.sh
+Both approaches provide helper scripts for fetching QEMU, applying patches, setting up the build environment, and running QEMU with the correct settings.
+
+## Credits
+
+This project builds upon the work of:
+
+- **Akihiko Odaki (小田喜陽彦)** - Initial work on "Virgil 3D on macOS"
+  - https://mail.gnu.org/archive/html/qemu-devel/2020-06/msg09998.html
+
+- **Kai Liew (kjliew)** - OpenGL Core implementation and improvements
+  - https://github.com/kjliew/qemu-3dfx
+
+- **Various SDL2 and Virgl contributors** who have worked on macOS support
+
+## References
+
+- [Virgl3D with SDL2 OpenGL patches](https://github.com/kjliew/qemu-3dfx/tree/master/virgil3d)
+- [SDL issue #4986 on macOS OpenGL support](https://github.com/libsdl-org/SDL/issues/4986)
+- [QEMU repository](https://github.com/qemu/qemu)
+- [Virglrenderer project](https://gitlab.freedesktop.org/virgl/virglrenderer)
+
+## License
+
+MIT License - See LICENSE file for details
