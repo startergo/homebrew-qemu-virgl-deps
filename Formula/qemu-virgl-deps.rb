@@ -51,6 +51,27 @@ class QemuVirglDeps < Formula
         # Build libepoxy without EGL
         system "git", "clone", "https://github.com/anholt/libepoxy.git"
         cd "libepoxy" do
+          system "patch", "-p1", "-i", "#{buildpath}/rtld_next_fix.patch"
+
+          # And before that block, create the patch file:
+          File.write("rtld_next_fix.patch", <<~EOF)
+          diff --git a/test/egl_without_glx.c b/test/egl_without_glx.c
+          index abcdefg..1234567 100644
+          --- a/test/egl_without_glx.c
+          +++ b/test/egl_without_glx.c
+          @@ -35,6 +35,12 @@
+          #include <stdlib.h>
+          #include <dlfcn.h>
+
+          +/* Define RTLD_NEXT if not available (macOS) */
+          +#ifndef RTLD_NEXT
+          +#define RTLD_NEXT ((void *) -1)
+          +#endif
+          +
+          #include "egl_common.h"
+
+        static void *
+       EOF  
           system "meson", "setup", "build", 
                  "--prefix=#{prefix}",
                  "--libdir=#{libdir}",
@@ -254,7 +275,7 @@ class QemuVirglDeps < Formula
         fi
         
         # Check QEMU version - patches are compatible with specific versions
-        COMPATIBLE_VERSIONS=("9.2.1" "8.2.1" "7.2.0" "6.1.0")
+        COMPATIBLE_VERSIONS=("9.2.1" "8.2.1")
         if [ -f "$QEMU_SRC/VERSION" ]; then
           QEMU_VERSION=$(cat "$QEMU_SRC/VERSION")
           COMPATIBLE=false
@@ -266,7 +287,7 @@ class QemuVirglDeps < Formula
           done
           
           if [ "$COMPATIBLE" != "true" ]; then
-            echo "Warning: These patches are primarily tested with QEMU versions 9.2.1, 8.2.1, 7.2.0, and 6.1.0"
+            echo "Warning: These patches are primarily tested with QEMU versions 9.2.1, 8.2.1"
             echo "Your QEMU version is $QEMU_VERSION"
             echo "The patches may not apply cleanly or could cause build failures."
             read -p "Do you want to continue anyway? (y/n) " -n 1 -r
@@ -278,7 +299,7 @@ class QemuVirglDeps < Formula
           fi
         else
           echo "Warning: Could not determine QEMU version."
-          echo "These patches are primarily tested with QEMU versions 9.2.1, 8.2.1, 7.2.0, and 6.1.0"
+          echo "These patches are primarily tested with QEMU versions 9.2.1, 8.2.1"
           read -p "Do you want to continue anyway? (y/n) " -n 1 -r
           echo
           if [[ ! $REPLY =~ ^[Yy]$ ]]; then
@@ -315,7 +336,7 @@ class QemuVirglDeps < Formula
         fi
         
         # Verify if version is one of the recommended versions
-        RECOMMENDED_VERSIONS=("9.2.1" "8.2.1" "7.2.0" "6.1.0")
+        RECOMMENDED_VERSIONS=("9.2.1" "8.2.1")
         IS_RECOMMENDED=false
         for version in "${RECOMMENDED_VERSIONS[@]}"; do
           if [ "$QEMU_VERSION" == "$version" ]; then
@@ -325,7 +346,7 @@ class QemuVirglDeps < Formula
         done
         
         if [ "$IS_RECOMMENDED" != "true" ]; then
-          echo "Warning: Version $QEMU_VERSION is not one of the recommended versions (9.2.1, 8.2.1, 7.2.0, 6.1.0)"
+          echo "Warning: Version $QEMU_VERSION is not one of the recommended versions (9.2.1, 8.2.1)"
           echo "The 3D patches may not apply cleanly to this version."
           read -p "Do you want to continue anyway? (y/n) " -n 1 -r
           echo
