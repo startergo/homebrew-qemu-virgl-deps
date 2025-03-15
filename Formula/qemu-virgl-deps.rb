@@ -50,9 +50,6 @@ class QemuVirglDeps < Formula
         
         # Build libepoxy without EGL
         system "git", "clone", "https://github.com/anholt/libepoxy.git"
-        cd "libepoxy" do
-          system "patch", "-p1", "-i", "#{buildpath}/rtld_next_fix.patch"
-
           # And before that block, create the patch file:
           File.write("rtld_next_fix.patch", <<~EOF)
           diff --git a/test/egl_without_glx.c b/test/egl_without_glx.c
@@ -72,6 +69,9 @@ class QemuVirglDeps < Formula
 
         static void *
        EOF  
+        cd "libepoxy" do
+          system "patch", "-p1", "-i", "#{buildpath}/rtld_next_fix.patch"
+          
           system "meson", "setup", "build", 
                  "--prefix=#{prefix}",
                  "--libdir=#{libdir}",
