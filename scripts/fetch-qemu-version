@@ -1,0 +1,81 @@
+#!/bin/bash
+
+# Default to QEMU 9.2.1 if no version specified (most recent compatible version)
+QEMU_VERSION="${1:-9.2.1}"
+TARGET_DIR="${2:-source/qemu}"
+
+# Check if version matches X.Y.Z format
+if ! [[ $QEMU_VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  echo "Error: Version must be in X.Y.Z format (e.g., 9.2.1)"
+  exit 1
+fi
+
+# Verify if version is one of the recommended versions
+RECOMMENDED_VERSIONS=("9.2.1" "8.2.1")
+IS_RECOMMENDED=false
+for version in "${RECOMMENDED_VERSIONS[@]}"; do
+  if [ "$QEMU_VERSION" == "$version" ]; then
+    IS_RECOMMENDED=true
+    break
+  fi
+done
+
+if [ "$IS_RECOMMENDED" != "true" ]; then
+  echo "Warning: Version $QEMU_VERSION is not one of the recommended versions (9.2.1, 8.2.1)"
+  echo "The 3D patches may not apply cleanly to this version."
+  read -p "Do you want to continue anyway? (y/n) " -n 1 -r
+  echo
+  if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+    exit 1
+  fi
+fi
+  
+  # Create target directory if it doesn't exist
+  mkdir -p "$TARGET_DIR"
+  
+  # If target is empty, clone fresh
+  if [ -z "$(ls -A "$TARGET_DIR" 2>/dev/null)" ]; then
+    echo "Cloning QEMU $QEMU_VERSION..."
+    git clone --branch v"$QEMU_VERSION" --depth 1 https://github.com/qemu/qemu.git "$TARGET_DIR"
+  else
+    # If target has git repo, fetch specific version
+    if [ -d "$TARGET_DIR/.git" ]; then
+      echo "Fetching QEMU $QEMU_VERSION in existing repository..."
+      (cd "$TARGET_DIR" && git fetch --depth 1 origin tag v"$QEMU_VERSION" && git checkout v"$QEMU_VERSION")
+    else
+      echo "Error: Directory $TARGET_DIR exists but is not a git repository and not empty."
+      echo "Please provide an empty or non-existent directory."
+      exit 1
+    fi
+  fi
+ 
+  # Apply version-specific patches
+  if [ "$QEMU_VERSION" == "9.2.1" ]; then
+    # Apply startergo's v06 patch for QEMU 9.2.1
+    echo "Applying startergo's v06 compatibility patch for QEMU 9.2.1..."
+    cp "HOMEBREW_PREFIX/opt/qemu-virgl-deps/patches/qemu-v06.diff" .
+    if git -C "$TARGET_DIR" apply ../qemu-v06.diff; then
+      echo "Successfully applied v06 compatibility patch"
+      git -C "$TARGET_DIR" add .
+      git -C "$TARGET_DIR" commit -m "Applied startergo's v06 patch for macOS compatibility"
+    else
+      echo "Warning: Could not apply v06 patch cleanly. You may encounter build issues."
+    fi
+  elif [ "$QEMU_VERSION" == "8.2.1" ]; then
+    # For 8.2.1, we'll apply the kjliew patch later in apply-3dfx-patches
+    echo "QEMU 8.2.1 cloned. You'll need to apply the 3dfx patches separately:"
+    echo "apply-3dfx-patches $TARGET_DIR"
+  fi
+  
+  echo ""
+  echo "QEMU $QEMU_VERSION prepared in $TARGET_DIR"
+  echo "You can now proceed with patching and building:"
+  echo ""
+  if [ "$QEMU_VERSION" == "8.2.1" ]; then
+    echo "1. Apply 3D enhancement patches:"
+    echo "   apply-3dfx-patches $TARGET_DIR"
+    echo ""
+  fi
+  echo "2. Configure and build QEMU:"
+  echo "   compile-qemu-virgl $TARGET_DIR"
+  echo ""

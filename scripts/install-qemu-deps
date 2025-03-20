@@ -1,0 +1,8 @@
+#!/bin/bash
+
+echo "Installing all dependencies required for building QEMU..."
+brew install $(brew deps --include-build qemu)
+
+echo ""
+echo "All QEMU dependencies installed."
+echo "You can now build QEMU with Virgl support."

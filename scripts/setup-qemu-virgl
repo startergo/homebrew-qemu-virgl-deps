@@ -1,0 +1,14 @@
+#!/bin/bash
+export LIBGL_DRIVERS_PATH="HOMEBREW_PREFIX/opt/mesa/lib/dri"
+export LIBEPOXY_PATH="HOMEBREW_PREFIX/opt/qemu-virgl-deps/lib/qemu-virgl"
+export DYLD_LIBRARY_PATH="HOMEBREW_PREFIX/opt/qemu-virgl-deps/lib/qemu-virgl:$DYLD_LIBRARY_PATH"
+
+# Print instructions
+echo "Environment set up for QEMU with Virgl."
+echo ""
+echo "To compile QEMU with these libraries, use the helper script:"
+echo "  compile-qemu-virgl /path/to/qemu-src"
+echo ""
+echo "To verify if your QEMU has been properly compiled with these libraries, run:"
+echo "  otool -L /path/to/qemu-system-x86_64 | grep -E 'virgl|epoxy'"
+echo ""
