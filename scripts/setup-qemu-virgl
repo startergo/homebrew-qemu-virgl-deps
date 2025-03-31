@@ -1,14 +1,30 @@
 #!/bin/bash
-export LIBGL_DRIVERS_PATH="HOMEBREW_PREFIX/opt/mesa/lib/dri"
-export LIBEPOXY_PATH="HOMEBREW_PREFIX/opt/qemu-virgl-deps/lib/qemu-virgl"
-export DYLD_LIBRARY_PATH="HOMEBREW_PREFIX/opt/qemu-virgl-deps/lib/qemu-virgl:$DYLD_LIBRARY_PATH"
 
-# Print instructions
-echo "Environment set up for QEMU with Virgl."
-echo ""
-echo "To compile QEMU with these libraries, use the helper script:"
-echo "  compile-qemu-virgl /path/to/qemu-src"
-echo ""
-echo "To verify if your QEMU has been properly compiled with these libraries, run:"
-echo "  otool -L /path/to/qemu-system-x86_64 | grep -E 'virgl|epoxy'"
-echo ""
+# Get Homebrew prefix dynamically
+BREW_PREFIX=$(brew --prefix)
+
+# Set environment variables for QEMU
+export LIBGL_DRIVERS_PATH="$BREW_PREFIX/opt/mesa/lib/dri"
+export LIBEPOXY_PATH="$BREW_PREFIX/opt/homebrew-qemu-virgl-deps/lib/qemu-virgl"
+export DYLD_LIBRARY_PATH="$BREW_PREFIX/opt/homebrew-qemu-virgl-deps/lib/qemu-virgl:$DYLD_LIBRARY_PATH"
+
+# This script replaces the original egl-helpers.h and egl.h with the patched versions
+# when building QEMU with OpenGL core mode.
+#
+# It expects that the main formula has copied the patched files into $PREFIX/patches.
+# For example:
+#   - $PREFIX/patches/egl.h
+#   - $PREFIX/patches/egl-helpers.h
+#
+# Ensure BUILD_OPENGL_CORE is set to "1" if not already defined.
+if [ -z "$BUILD_OPENGL_CORE" ]; then
+  echo "BUILD_OPENGL_CORE is not set. Setting BUILD_OPENGL_CORE to 1."
+  export BUILD_OPENGL_CORE=1
+fi
+
+# Ensure that PREFIX is exported.
+if [ -z "$PREFIX" ]; then
+  echo "PREFIX variable is not set. Attempting to export PREFIX from brew..."
+  PREFIX=$(brew --prefix homebrew-qemu-virgl-deps)
+  if [ -z "$PREFIX" ]; then
+    echo "Error: Unable to determine the home

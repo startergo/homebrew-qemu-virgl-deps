@@ -1,9 +1,12 @@
 #!/bin/bash
 
+# Get Homebrew prefix dynamically
+BREW_PREFIX=$(brew --prefix)
+
 # Set environment variables for QEMU
-export LIBGL_DRIVERS_PATH="HOMEBREW_PREFIX/opt/mesa/lib/dri"
-export LIBEPOXY_PATH="HOMEBREW_PREFIX/opt/qemu-virgl-deps/lib/qemu-virgl"
-export DYLD_LIBRARY_PATH="HOMEBREW_PREFIX/opt/qemu-virgl-deps/lib/qemu-virgl:$DYLD_LIBRARY_PATH"
+export LIBGL_DRIVERS_PATH="$BREW_PREFIX/opt/mesa/lib/dri"
+export LIBEPOXY_PATH="$BREW_PREFIX/opt/homebrew-qemu-virgl-deps/lib/qemu-virgl"
+export DYLD_LIBRARY_PATH="$BREW_PREFIX/opt/homebrew-qemu-virgl-deps/lib/qemu-virgl:$DYLD_LIBRARY_PATH"
 
 # Check if a QEMU binary is specified
 if [ -z "$1" ]; then
@@ -14,7 +17,7 @@ fi
 
 # Check if the QEMU binary is linked with our libraries
 if command -v otool &>/dev/null; then
-  if ! otool -L "$1" | grep -q "HOMEBREW_PREFIX/opt/qemu-virgl-deps/lib/qemu-virgl/libvirglrenderer"; then
+  if ! otool -L "$1" | grep -q "$BREW_PREFIX/opt/homebrew-qemu-virgl-deps/lib/qemu-virgl/libvirglrenderer"; then
     echo "Warning: This QEMU binary may not be compiled with the Virgl libraries"
     echo "For best results, compile QEMU using: compile-qemu-virgl /path/to/qemu-src"
     echo "Continuing anyway..."

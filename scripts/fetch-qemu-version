@@ -52,14 +52,14 @@ fi
   # Apply version-specific patches
   if [ "$QEMU_VERSION" == "9.2.1" ]; then
     # Apply startergo's v06 patch for QEMU 9.2.1
-    echo "Applying startergo's v06 compatibility patch for QEMU 9.2.1..."
-    cp "HOMEBREW_PREFIX/opt/qemu-virgl-deps/patches/qemu-v06.diff" .
-    if git -C "$TARGET_DIR" apply ../qemu-v06.diff; then
-      echo "Successfully applied v06 compatibility patch"
-      git -C "$TARGET_DIR" add .
-      git -C "$TARGET_DIR" commit -m "Applied startergo's v06 patch for macOS compatibility"
+    PATCH_PATH="$(brew --prefix)/opt/homebrew-qemu-virgl-deps/patches/qemu-v06.diff"
+    if [ -f "$PATCH_PATH" ]; then
+      echo "Applying v06 patch for QEMU 9.2.1..."
+      cp "$PATCH_PATH" .
+      git -C "$TARGET_DIR" apply ../qemu-v06.diff
     else
-      echo "Warning: Could not apply v06 patch cleanly. You may encounter build issues."
+      echo "Error: Patch file not found: $PATCH_PATH"
+      exit 1
     fi
   elif [ "$QEMU_VERSION" == "8.2.1" ]; then
     # For 8.2.1, we'll apply the kjliew patch later in apply-3dfx-patches
@@ -74,7 +74,6 @@ fi
   if [ "$QEMU_VERSION" == "8.2.1" ]; then
     echo "1. Apply 3D enhancement patches:"
     echo "   apply-3dfx-patches $TARGET_DIR"
-    echo ""
   fi
   echo "2. Configure and build QEMU:"
   echo "   compile-qemu-virgl $TARGET_DIR"

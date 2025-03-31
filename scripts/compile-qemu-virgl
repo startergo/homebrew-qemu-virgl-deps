@@ -25,21 +25,21 @@ BREW_PREFIX=$(brew --prefix)
 if [ "$BUILD_OPENGL_CORE" == "1" ]; then
   ANGLE_INCLUDE=""
 else
-  ANGLE_INCLUDE="-I$BREW_PREFIX/opt/qemu-virgl-deps/include/qemu-virgl/angle"
+  ANGLE_INCLUDE="-I$BREW_PREFIX/opt/homebrew-qemu-virgl-deps/include/angle"
 fi
 
 # Setup PKG_CONFIG_PATH for QEMU Virgl dependencies
-export PKG_CONFIG_PATH="$BREW_PREFIX/opt/qemu-virgl-deps/lib/qemu-virgl/pkgconfig:$PKG_CONFIG_PATH"
+export PKG_CONFIG_PATH="$BREW_PREFIX/opt/homebrew-qemu-virgl-deps/lib/pkgconfig:$PKG_CONFIG_PATH"
 
 # Construct CFLAGS with the necessary include paths.
 # In OpenGL Core mode, we do not add the angle include directory
 export CFLAGS="-F$SDK_PATH/System/Library/Frameworks \
--I$BREW_PREFIX/opt/qemu-virgl-deps/include/qemu-virgl/epoxy \
--I$BREW_PREFIX/opt/qemu-virgl-deps/include/qemu-virgl/virgl \
+-I$BREW_PREFIX/opt/homebrew-qemu-virgl-deps/include/epoxy \
+-I$BREW_PREFIX/opt/homebrew-qemu-virgl-deps/include/virgl \
 $ANGLE_INCLUDE $CFLAGS"
 
 # Setup LDFLAGS with the necessary library paths.
-export LDFLAGS="-F$SDK_PATH/System/Library/Frameworks -L$BREW_PREFIX/opt/qemu-virgl-deps/lib/qemu-virgl $LDFLAGS"
+export LDFLAGS="-F$SDK_PATH/System/Library/Frameworks -L$BREW_PREFIX/opt/homebrew-qemu-virgl-deps/lib $LDFLAGS"
 
 export OBJCFLAGS="-F$SDK_PATH/System/Library/Frameworks $OBJCFLAGS"
 

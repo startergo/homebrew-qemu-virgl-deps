@@ -1,4 +1,4 @@
-name: Homebrew Tap Test
+name: Formula Test
 
 on:
   push:
@@ -23,7 +23,7 @@ jobs:
     # Step 3: Install the formula
     - name: Install the formula
       run: |
-        brew install qemu-virgl-deps
+        brew install homebrew-qemu-virgl-deps
 
     # Step 4: Fetch QEMU source
     - name: Fetch QEMU source
@@ -45,4 +45,4 @@ jobs:
     # Step 7: Verify QEMU execution
     - name: Verify QEMU execution
       run: |
-        qemu-virgl /path/to/qemu-system-x86_64 -display cocoa,gl=es --version
+        qemu-virgl $(brew --prefix)/bin/qemu-system-x86_64 -display cocoa,gl=es --version

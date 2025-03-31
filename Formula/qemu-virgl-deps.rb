@@ -337,6 +337,10 @@ class QemuVirglDeps < Formula
       (bin/script).write content
       chmod 0755, bin/script
     end
+
+    resource("qemu-v06-patch").stage do
+      system "patch", "-p1", "-i", "qemu-v06.diff"
+    end
   end
 
   def caveats

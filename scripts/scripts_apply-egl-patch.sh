@@ -16,9 +16,9 @@ fi
 # Ensure that PREFIX is exported.
 if [ -z "$PREFIX" ]; then
   echo "PREFIX variable is not set. Attempting to export PREFIX from brew..."
-  PREFIX=$(brew --prefix qemu-virgl-deps)
+  PREFIX=$(brew --prefix homebrew-qemu-virgl-deps)
   if [ -z "$PREFIX" ]; then
-    echo "Error: Unable to determine the qemu-virgl-deps prefix using brew --prefix."
+    echo "Error: Unable to determine the homebrew-qemu-virgl-deps prefix using brew --prefix."
     exit 1
   fi
   export PREFIX
@@ -27,45 +27,19 @@ fi
 
 # Adjust the include path so that the compiler finds epoxy/egl.h.
 # Instead of adding the epoxy directory, add its parent directory.
-export CFLAGS="-I${PREFIX}/include/qemu-virgl $CFLAGS"
+export CFLAGS="-I${PREFIX}/include/homebrew-qemu-virgl $CFLAGS"
 echo "CFLAGS is now: $CFLAGS"
 
 if [ "$BUILD_OPENGL_CORE" = "1" ]; then
-  # echo "OpenGL core build enabled."
+  echo "OpenGL core build enabled."
   
-  # # Replace egl-helpers.h in the QEMU source tree.
-  # echo "Replacing egl-helpers.h with patched version..."
-  # ORIGINAL_HELPERS="ui/egl-helpers.h"
-  # PATCHED_HELPERS="${PREFIX}/patches/egl-helpers.h"
-  
-  # if [ -f "$PATCHED_HELPERS" ]; then
-  #   cp "$PATCHED_HELPERS" "$ORIGINAL_HELPERS"
-  #   echo "Patched egl-helpers.h applied successfully."
-  # else
-  #   echo "Error: Patched egl-helpers.h not found at $PATCHED_HELPERS"
-  #   exit 1
-  # fi
+  # Replace egl-helpers.h in the QEMU source tree.
+  echo "Replacing egl-helpers.h with patched version..."
+  cp "${PREFIX}/patches/egl-helpers.h" "$QEMU_SRC/include/ui/egl-helpers.h"
 
-  # Replace the libepoxy egl.h header.
+  # Replace egl.h in the QEMU source tree.
   echo "Replacing egl.h with patched version..."
-  PATCHED_EGL="${PREFIX}/patches/egl.h"
-  
-  # Construct the destination path for the egl.h file within the built libepoxy.
-  ORIGINAL_EGL="${PREFIX}/include/qemu-virgl/epoxy/egl.h"
-  
-  # Ensure that the target directory exists.
-  mkdir -p "$(dirname "$ORIGINAL_EGL")"
-  
-  if [ -f "$PATCHED_EGL" ]; then
-    cp "$PATCHED_EGL" "$ORIGINAL_EGL"
-    echo "Patched egl.h applied successfully to $ORIGINAL_EGL."
-  else
-    echo "Error: Patched egl.h not found at $PATCHED_EGL"
-    exit 1
-  fi
-
-else
-  echo "OpenGL core build not enabled. No patch applied."
+  cp "${PREFIX}/patches/egl.h" "$QEMU_SRC/include/ui/egl.h"
 fi
 
 echo ""
