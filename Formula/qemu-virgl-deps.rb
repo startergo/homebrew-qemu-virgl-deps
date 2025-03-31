@@ -65,7 +65,7 @@ class QemuVirglDeps < Formula
   # New resource stanzas for header patches using the correct repository name
   resource "egl-h" do
     url "https://raw.githubusercontent.com/startergo/homebrew-qemu-virgl-deps/refs/heads/main/Patches/egl.h"
-    sha256 "29c01316343c97b646e2b34b0ffc4b0be99d2586d0a69ab93dc37a3a8acfe5ce"
+    sha256 "ee0d3b779fe3444ff9f45f76fe38d6b967a65ba6d5e0af3ea0aa386d19d7a10f"
   end
 
   resource "egl-helpers-h" do
