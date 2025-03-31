@@ -114,6 +114,18 @@ class QemuVirglDeps < Formula
     if build.with? "opengl-core"
       ohai "Building with OpenGL Core backend (kjliew's approach)"
 
+      # Ensure scripts directory exists and is used as an entry point
+      scripts_dir = "#{buildpath}/scripts"
+      mkdir_p scripts_dir
+
+      # Move and reference the fetch-qemu-version script
+      fetch_qemu_script = "#{scripts_dir}/fetch-qemu-version"
+      cp "#{buildpath}/fetch-qemu-version", fetch_qemu_script
+      chmod "+x", fetch_qemu_script
+
+      # Call the fetch-qemu-version script
+      system fetch_qemu_script, "9.2.1", "#{buildpath}/source/qemu"
+
       # Build our integrated libepoxy from anholt's resource.
       resource("libepoxy").stage do
         mkdir "build"
@@ -338,7 +350,7 @@ class QemuVirglDeps < Formula
            $ install-qemu-deps
 
         2. Fetch QEMU (recommended versions: 9.2.1, 8.2.1):
-           $ fetch-qemu-version 8.2.1 source/qemu
+           $ fetch-qemu-version 9.2.1 source/qemu
 
         3. Apply 3D enhancement patches:
            $ apply-3dfx-patches source/qemu
@@ -389,9 +401,9 @@ class QemuVirglDeps < Formula
         To run QEMU with the right environment:
 
         1. Use the provided wrapper script:
-           $ qemu-virgl /path/to/qemu-system-x86_64 -display sdl,gl=es [other options]
+           $ qemu-virgl /path/to/qemu-system-x86_64 -display cocoa,gl=es [other options]
 
-        Graphics modes available (use with -display sdl,gl=MODE):
+        Graphics modes available (use with -display cocoa,gl=MODE):
            - gl=off  - Disable Virgil 3D GPU. Most stable but laggy.
            - gl=core - Enable OpenGL.framework. May be unstable.
            - gl=es   - Enable ANGLE. Stable and fast. (Recommended)
