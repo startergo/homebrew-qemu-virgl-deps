@@ -48,8 +48,8 @@ class QemuVirglDeps < Formula
 
   # Add the patches as resources
   resource "qemu-v06-patch" do
-    url "file://#{HOMEBREW_LIBRARY}/Taps/local/homebrew-tap/Formula/qemu-virgl-deps/patches/qemu-v06.diff"
-    sha256 "61e9138e102a778099b96fb00cffce2ba65040c1f97f2316da3e7ef2d652034b"
+    url "https://raw.githubusercontent.com/startergo/homebrew-qemu-virgl-deps/main/Patches/qemu-v06.diff"
+    sha256 "61e9138e102a778099b96fb00cffce2ba65040c1f97f2316da3e7ef2d652034b" # Replace with the actual SHA256 hash of the patch file
   end
 
   resource "virgl-sdl-patch" do
