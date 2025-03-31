@@ -42,6 +42,8 @@ if [ "$BUILD_OPENGL_CORE" = "1" ]; then
   cp "${PREFIX}/patches/egl.h" "$QEMU_SRC/include/ui/egl.h"
 fi
 
+script_path = "#{HOMEBREW_LIBRARY}/Taps/startergo/homebrew-qemu-virgl-deps/scripts/scripts_apply-egl-patch.sh"
+
 echo ""
 echo "-----------------------------------------------------------------"
 echo "You are in 'detached HEAD' state. You can look around, make experimental"

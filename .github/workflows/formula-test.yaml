@@ -18,12 +18,12 @@ jobs:
     # Step 2: Tap the repository
     - name: Tap the repository
       run: |
-        brew tap startergo/homebrew-qemu-virgl-deps .
+        brew tap startergo/homebrew-qemu-virgl-deps
 
     # Step 3: Install the formula
     - name: Install the formula
       run: |
-        brew install homebrew-qemu-virgl-deps
+        brew install qemu-virgl-deps
 
     # Step 4: Fetch QEMU source
     - name: Fetch QEMU source

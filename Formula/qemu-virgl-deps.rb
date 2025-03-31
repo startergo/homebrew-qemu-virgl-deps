@@ -315,7 +315,7 @@ class QemuVirglDeps < Formula
 
     # Install helper scripts from formula files.
     %w[apply-3dfx-patches fetch-qemu-version compile-qemu-virgl install-qemu-deps setup-qemu-virgl qemu-virgl].each do |script|
-      script_path = "#{HOMEBREW_LIBRARY}/Taps/local/homebrew-tap/Formula/qemu-virgl-deps/scripts/#{script}"
+      script_path = "#{HOMEBREW_LIBRARY}/Taps/startergo/homebrew-qemu-virgl-deps/scripts/#{script}"
       content = File.read(script_path)
       content.gsub!("HOMEBREW_PREFIX", HOMEBREW_PREFIX.to_s)
       if build.with? "opengl-core"
