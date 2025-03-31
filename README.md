@@ -22,7 +22,7 @@ Last updated: 2025-03-15
 
 ```bash
 # Add the repository
-brew tap startergo/qemu-virgl-deps
+brew tap startergo/homebrew-qemu-virgl-deps
 
 # Install with default options (ANGLE-based approach)
 brew install qemu-virgl-deps
@@ -63,7 +63,7 @@ brew install qemu-virgl-deps --without-prebuilt-angle
 
 5. **Run QEMU with Virgl acceleration**:
    ```bash
-   qemu-virgl /path/to/qemu-system-x86_64 -display sdl,gl=es [other options]
+   qemu-virgl /path/to/qemu-system-x86_64 -display cocoa,gl=es [other options]
    ```
 
 ### Graphics Modes
