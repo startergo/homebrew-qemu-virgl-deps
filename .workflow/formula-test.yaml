@@ -1,0 +1,48 @@
+name: Homebrew Tap Test
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  test:
+    runs-on: macos-latest
+
+    steps:
+    # Step 1: Check out the repository
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    # Step 2: Tap the repository
+    - name: Tap the repository
+      run: |
+        brew tap startergo/homebrew-qemu-virgl-deps .
+
+    # Step 3: Install the formula
+    - name: Install the formula
+      run: |
+        brew install qemu-virgl-deps
+
+    # Step 4: Fetch QEMU source
+    - name: Fetch QEMU source
+      run: |
+        fetch-qemu-version 9.2.1 source/qemu
+
+    # Step 5: Apply 3D enhancement patches (only for OpenGL Core approach)
+    - name: Apply 3D enhancement patches
+      if: ${{ matrix.opengl_core == 'true' }}
+      run: |
+        apply-3dfx-patches source/qemu
+
+    # Step 6: Configure and build QEMU
+    - name: Configure and build QEMU
+      run: |
+        compile-qemu-virgl source/qemu
+        cd source/qemu && make -j$(sysctl -n hw.ncpu)
+
+    # Step 7: Verify QEMU execution
+    - name: Verify QEMU execution
+      run: |
+        qemu-virgl /path/to/qemu-system-x86_64 -display cocoa,gl=es --version

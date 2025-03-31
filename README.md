@@ -50,7 +50,7 @@ brew install qemu-virgl-deps --without-prebuilt-angle
    
    This will create a custom version with compatibility patches applied.
 
-3. **Apply 3D enhancement patches**:
+3. **Apply 3D enhancement patches** (only for the OpenGL Core approach):
    ```bash
    apply-3dfx-patches source/qemu
    ```
