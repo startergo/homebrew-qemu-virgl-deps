@@ -53,12 +53,12 @@ class QemuVirglDeps < Formula
   end
 
   resource "virgl-sdl-patch" do
-    url "file://#{HOMEBREW_LIBRARY}/Taps/local/homebrew-tap/Formula/qemu-virgl-deps/patches/0001-Virgil3D-with-SDL2-OpenGL.patch"
+    url "https://raw.githubusercontent.com/startergo/homebrew-qemu-virgl-deps/main/Patches/0001-Virgil3D-with-SDL2-OpenGL.patch"
     sha256 "e61679dc38efe80d38883c076a6f678bbd42d610875114e8af9a5b282474b39b"
   end
 
   resource "glsl-patch" do
-    url "file://#{HOMEBREW_LIBRARY}/Taps/local/homebrew-tap/Formula/qemu-virgl-deps/patches/0002-Virgil3D-macOS-GLSL-version.patch"
+    url "https://raw.githubusercontent.com/startergo/homebrew-qemu-virgl-deps/main/Patches/0002-Virgil3D-macOS-GLSL-version.patch"
     sha256 "52bb0903e656d59c08d2c38e8bab5d4fdffc98fc9f85f879cfdeb0c9107ea5f4"
   end
 
