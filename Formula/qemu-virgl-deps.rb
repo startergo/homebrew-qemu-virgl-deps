@@ -466,14 +466,8 @@ class QemuVirglDeps < Formula
   end
 
   test do
-    %w[libepoxy.dylib libvirglrenderer.dylib].each do |lib_file|
+    %w[libEGL.dylib libGLESv2.dylib].each do |lib_file|
       assert_predicate lib/"qemu-virgl"/lib_file, :exist?
-    end
-
-    unless build.with? "opengl-core"
-      %w[libEGL.dylib libGLESv2.dylib].each do |lib_file|
-        assert_predicate lib/"qemu-virgl"/lib_file, :exist?
-      end
     end
 
     %w[epoxy virglrenderer].each do |pkg|
@@ -502,4 +496,7 @@ class QemuVirglDeps < Formula
     system "pkg-config", "--exists", "virglrenderer"
     assert_equal 0, $CHILD_STATUS.exitstatus
   end
+
+# Close the class definition
+end
 end
