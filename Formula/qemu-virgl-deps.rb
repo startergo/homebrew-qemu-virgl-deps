@@ -46,6 +46,31 @@ class QemuVirglDeps < Formula
     sha256 "a7ced37f4102b745ac86d6a70a9da399cc139ff168ba6b8002b4d8d43c900c15"
   end
 
+  def install
+    # Check if OpenGL Core backend is enabled
+    if build.with? "opengl-core"
+      ohai "Building with OpenGL Core backend (kjliew's approach)"
+      
+      # Ensure Anholt's libepoxy is used for OpenGL Core
+      resource("libepoxy").stage do
+        mkdir "build"
+        cd "build" do
+          system "meson", "setup", "..",
+                 "-Dc_args=-I#{Formula["mesa"].opt_include} -F#{sdk_path}/System/Library/Frameworks -headerpad_max_install_names",
+                 "-Degl=no", # Disable EGL for OpenGL Core
+                 "-Dx11=false",
+                 "--prefix=#{prefix}",
+                 "--libdir=#{libdir}",
+                 "--includedir=#{includedir}/epoxy"
+          system "meson", "compile"
+          system "meson", "install"
+        end
+      end
+    else
+      ohai "Building with ANGLE-based approach"
+      # Handle ANGLE-based build here
+    end
+
   # Add the patches as resources
   resource "qemu-v06-patch" do
     url "https://raw.githubusercontent.com/startergo/homebrew-qemu-virgl-deps/main/Patches/qemu-v06.diff"
