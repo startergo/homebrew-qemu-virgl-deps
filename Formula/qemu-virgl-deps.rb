@@ -2,7 +2,7 @@ class QemuVirglDeps < Formula
   # Define version constants at the top
   VIRGLRENDERER_VERSION = "1.1.0".freeze
   LIBEPOXY_VERSION = "1.5.11".freeze
-  
+
   desc "Dependencies for QEMU with Virgil 3D acceleration"
   homepage "https://github.com/startergo/qemu-virgl-deps"
   url "https://github.com/startergo/homebrew-qemu-virgl-deps/archive/refs/tags/v20250315.1.tar.gz"
@@ -220,7 +220,6 @@ class QemuVirglDeps < Formula
 
         mkdir "build" do
           system "meson", "setup", *std_meson_args,
-                 "-Dprefix=#{prefix}",
                  "-Dlibdir=#{libdir}",
                  "-Dincludedir=#{includedir}",
                  "-Degl=no", "-Dglx=no", "-Dx11=false",
@@ -362,9 +361,9 @@ class QemuVirglDeps < Formula
         # Copy headers BEFORE meson build
         ohai "Copying epoxy headers to #{includedir}/epoxy"
         cp_r "include/epoxy/.", "#{includedir}/epoxy/"
-        
+
         ohai "Building libepoxy with ANGLE support using meson"
-        
+
         mkdir "build" do
           system "meson", "setup", *std_meson_args,
                  "-Dc_args=#{ENV["CFLAGS"]} #{angle_include_flags}",
