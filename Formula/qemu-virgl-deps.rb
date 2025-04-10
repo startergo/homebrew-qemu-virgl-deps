@@ -110,7 +110,7 @@ class QemuVirglDeps < Formula
     ENV.append_path "PKG_CONFIG_PATH", "#{lib}/pkgconfig"
     ENV.append_path "PKG_CONFIG_PATH", "#{libdir}/pkgconfig"
 
-    # 3. Create the epoxy.pc file
+    # 3. Create the epoxy.pc file with the correct EGL flag
     File.write("#{libdir}/pkgconfig/epoxy.pc", <<~EOS)
       prefix=#{prefix}
       exec_prefix=${prefix}
@@ -125,7 +125,7 @@ class QemuVirglDeps < Formula
 
       # The following vars are used by virglrenderer
       epoxy_has_glx=0
-      epoxy_has_egl=0
+      epoxy_has_egl=#{build.with?("opengl-core") ? "0" : "1"}
       epoxy_has_wgl=0
     EOS
 
