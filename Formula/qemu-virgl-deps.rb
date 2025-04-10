@@ -502,7 +502,34 @@ typedef unsigned int EGLBoolean;
 #define EGL_TRUE 1
 #endif /* EPOXY_EGL_H */
 EOF
-        
+
+        # Update workflow to create the header in the exact location:
+        # First check the actual include path from pkg-config
+        EPOXY_INCLUDE_DIR="$(pkg-config --variable=includedir epoxy)"
+        echo "Epoxy include dir from pkg-config: $EPOXY_INCLUDE_DIR"
+
+        # Create the stub header in both the pkg-config location and the fallback local path
+        sudo mkdir -p "${EPOXY_INCLUDE_DIR}/epoxy"
+        sudo bash -c 'cat > ${EPOXY_INCLUDE_DIR}/epoxy/egl.h << EOF
+/* Stub EGL header for OpenGL Core build */
+#ifndef EPOXY_EGL_H
+#define EPOXY_EGL_H
+typedef int EGLint;
+typedef unsigned int EGLenum;
+typedef void *EGLDisplay;
+typedef void *EGLSurface;
+typedef void *EGLContext;
+typedef void *EGLConfig;
+typedef unsigned int EGLBoolean;
+#define EGL_FALSE 0
+#define EGL_TRUE 1
+#endif /* EPOXY_EGL_H */
+EOF'
+
+        # Verify the header was created correctly
+        sudo ls -l "${EPOXY_INCLUDE_DIR}/epoxy/"
+        sudo cat "${EPOXY_INCLUDE_DIR}/epoxy/egl.h"
+
         # Set CFLAGS to include our header directory
         export CFLAGS="-I$(pwd)/../include $CFLAGS"
         
@@ -540,6 +567,19 @@ EOF
       echo "Running configure with: $CONFIG_FLAGS"
       ../configure $CONFIG_FLAGS
       
+      # Run configure with verbosity to see what's happening
+      cd source/qemu
+      mkdir -p build
+      cd build
+
+      # First dump the pkg-config information for debugging
+      pkg-config --cflags --libs epoxy
+      pkg-config --variable=includedir epoxy
+      pkg-config --variable=epoxy_has_egl epoxy
+
+      # Configure with extra verbosity
+      ../configure --disable-egl --enable-opengl --enable-virglrenderer --target-list=x86_64-softmmu,aarch64-softmmu -v
+
       echo "Configuration complete. Build with:"
       echo "cd $QEMU_PATH/build && make -j\$(sysctl -n hw.ncpu)"
     EOS
