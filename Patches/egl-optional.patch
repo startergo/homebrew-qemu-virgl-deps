@@ -1,8 +1,8 @@
 diff --git a/meson.build b/meson.build
-index xxxxxx..xxxxxx 100644
+index xxxxxx..yyyyyy 100644
 --- a/meson.build
 +++ b/meson.build
-@@ -1433,11 +1433,14 @@ if not get_option('opengl').auto() or have_system or have_vhost_user_gpu
+@@ -1433,7 +1433,10 @@ if not get_option('opengl').auto() or have_system or have_vhost_user_gpu
    epoxy = dependency('epoxy', method: 'pkg-config',
                        required: get_option('opengl'))
    
@@ -14,25 +14,3 @@ index xxxxxx..xxxxxx 100644
      opengl = epoxy
    elif get_option('opengl').enabled()
      error('epoxy/egl.h not found')
-   endif
- 
- if get_option('opengl')
-   opengl_core_required = get_option('opengl_core').enabled()
-   opengl_deps += epoxy
-   
--  if not cc.has_header('epoxy/egl.h', dependencies: epoxy)
-+  # Make EGL headers optional when using OpenGL Core
-+  need_egl = not get_option('opengl_core').enabled()
-+  
-+  if need_egl and not cc.has_header('epoxy/egl.h', dependencies: epoxy)
-     if opengl_core_required
-       error('epoxy/egl.h not found')
-     else
-@@ -1450,6 +1453,7 @@ if get_option('opengl')
-       opengl_deps += dependency('', required: false)
-     endif
-   endif
-+
- endif
- 
- if get_option('vulkan')

@@ -77,7 +77,7 @@ class QemuVirglDeps < Formula
 
   resource "egl-optional-patch" do
     url "https://raw.githubusercontent.com/startergo/homebrew-qemu-virgl-deps/main/Patches/egl-optional.patch"
-    sha256 "19afd3d1a737cc62ae29fe74f21735f6d2176ee9649689991ee029d4c368a362"
+    sha256 "43bdea2535830563793356b6e127ca6b6135dcd6379f5f9adcec796e45d9764c"
   end
 
   def virglrenderer_core_resource
@@ -372,7 +372,9 @@ class QemuVirglDeps < Formula
       resource("egl-optional-patch").stage { cp "egl-optional.patch", "#{prefix}/patches/" }
     end
 
-    resource("qemu-v06-patch").stage { cp "qemu-v06.diff", "#{prefix}/patches/" } if File.exist?(resource("qemu-v06-patch").cached_download)
+    if File.exist?(resource("qemu-v06-patch").cached_download)
+      resource("qemu-v06-patch").stage { cp "qemu-v06.diff", "#{prefix}/patches/" }
+    end
 
     # Create a temporary directory for scripts
     scripts_temp = Pathname.new(Dir.mktmpdir)
@@ -393,9 +395,9 @@ class QemuVirglDeps < Formula
       script_path = File.join(scripts_dir, script)
       if File.exist?(script_path)
         # Copy to temporary directory first
-        FileUtils.cp(script_path, scripts_temp)
+        cp(script_path, scripts_temp)
         temp_script_path = scripts_temp/script
-        FileUtils.chmod(0755, temp_script_path)
+        chmod(0755, temp_script_path)
 
         # Install from temporary directory
         if script == "apply-headers-patch.sh"
