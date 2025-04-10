@@ -77,7 +77,7 @@ class QemuVirglDeps < Formula
 
   resource "egl-optional-patch" do
     url "https://raw.githubusercontent.com/startergo/homebrew-qemu-virgl-deps/main/Patches/egl-optional.patch"
-    sha256 "444521499773cadc22bdcabfc9b23de3700776b55f0d15872561818ab3cdb0a6"
+    sha256 "4e47bf4233ea3de465d15ea7135e61ec8fd3009c15a2ec9ea3b39ae109da2dfe"
   end
 
   def virglrenderer_core_resource
@@ -333,7 +333,8 @@ class QemuVirglDeps < Formula
         system "patch", "-p1", "-v", "-i", egl_patch_file/"egl-optional.patch"
 
         # Set comprehensive environment for the build
-        ENV["CFLAGS"] = "-DGL_SILENCE_DEPRECATION -F#{sdk_path}/System/Library/Frameworks -I#{includedir} #{angle_include_flags}"
+        ENV["CFLAGS"] = "-DGL_SILENCE_DEPRECATION -F#{sdk_path}/System/Library/Frameworks " \
+                        "-I#{includedir} #{angle_include_flags}"
         ENV["CPPFLAGS"] = ENV["CFLAGS"]
         ENV["LDFLAGS"] = "-F#{sdk_path}/System/Library/Frameworks -L#{libdir} -L#{angle_headers}"
 
@@ -365,298 +366,43 @@ class QemuVirglDeps < Formula
     mkdir_p "#{prefix}/patches"
     resource("virgl-macos-patch").stage { cp "0001-Virglrenderer-on-Windows-and-macOS.patch", "#{prefix}/patches/" }
     resource("qemu-sdl-patch").stage { cp "0001-Virgil3D-with-SDL2-OpenGL.patch", "#{prefix}/patches/" }
-    resource("egl-optional-patch").stage { cp "egl-optional.patch", "#{prefix}/patches/" }
 
-    # Create helper scripts
-    create_helper_scripts(libdir, includedir)
-  end
-
-  def create_helper_scripts(libdir, _includedir)
-    # Install QEMU helper script
-    (bin/"install-qemu-deps").write <<~EOS
-      #!/bin/bash
-      set -e
-      echo "Installing QEMU dependencies..."
-      brew install sdl3 sdl2 sdl2_image ninja cmake meson pkg-config
-      echo "QEMU dependencies installed successfully."
-      echo "Next steps:"
-      echo "1. Fetch QEMU: fetch-qemu-version <version> <destination>"
-      echo "2. Apply patches: apply-3dfx-patches <qemu-path>"
-      echo "3. Build QEMU: compile-qemu-virgl <qemu-path>"
-    EOS
-    (bin/"install-qemu-deps").chmod 0755
-
-    # Add fetch-qemu-version script
-    (bin/"fetch-qemu-version").write <<~EOS
-      #!/bin/bash
-      set -e
-
-      if [ $# -lt 2 ]; then
-        echo "Usage: $0 <version> <destination>"
-        echo "Example: $0 8.2.1 ./qemu"
-        exit 1
-      fi
-
-      VERSION=$1
-      DEST=$2
-
-      echo "Fetching QEMU $VERSION to $DEST"
-      mkdir -p $DEST
-      curl -L https://download.qemu.org/qemu-$VERSION.tar.xz | tar -xJ -C $DEST --strip-components 1
-
-      echo "QEMU $VERSION downloaded to $DEST"
-      echo "Next step: apply-3dfx-patches $DEST"
-    EOS
-    (bin/"fetch-qemu-version").chmod 0755
-
-    # Add patch application script
-    (bin/"apply-3dfx-patches").write <<~EOS
-      #!/bin/bash
-      set -e
-
-      if [ $# -lt 1 ]; then
-        echo "Usage: $0 <qemu-path>"
-        exit 1
-      fi
-
-      QEMU_PATH=$1
-      PATCH_DIR="#{prefix}/patches"
-
-      echo "Applying patches to QEMU in $QEMU_PATH"
-      cd $QEMU_PATH
-
-      # Apply the EGL optional patch to fix the epoxy/egl.h check
-      patch -p1 < $PATCH_DIR/egl-optional.patch || echo "Warning: EGL optional patch failed, may already be applied."
-
-      # Apply the SDL2 OpenGL patch
-      patch -p1 < $PATCH_DIR/0001-Virgil3D-with-SDL2-OpenGL.patch || echo "Warning: SDL2 OpenGL patch failed, may already be applied."
-
-      echo "Patches applied. Next: compile-qemu-virgl $QEMU_PATH"
-    EOS
-    (bin/"apply-3dfx-patches").chmod 0755
-
-    # Add compile-qemu-virgl script
-    (bin/"compile-qemu-virgl").write <<~EOS
-      #!/bin/bash
-      set -e
-
-      if [ $# -lt 1 ]; then
-        echo "Usage: $0 <qemu-path> [--opengl-core]"
-        exit 1
-      fi
-
-      QEMU_PATH=$1
-      shift
-      OPENGL_CORE=false
-
-      # Check for --opengl-core flag
-      while [ "$#" -gt 0 ]; do
-        case "$1" in
-          --opengl-core)
-            OPENGL_CORE=true
-            shift
-            ;;
-          *)
-            echo "Unknown option: $1"
-            exit 1
-            ;;
-        esac
-      done
-
-      echo "Configuring QEMU with Virgil3D support..."
-      cd $QEMU_PATH
-
-      # Create a build directory
-      mkdir -p build
-
-      # Get paths from brew
-      BREW_PREFIX=$(brew --prefix)
-      EPOXY_PREFIX="$BREW_PREFIX/opt/qemu-virgl-deps"
-
-      # Basic configure flags with specific target list for faster builds
-      CONFIG_FLAGS="--enable-sdl --enable-opengl --enable-virglrenderer --target-list=x86_64-softmmu,aarch64-softmmu"
-
-      # Add pkg-config path to find the right libraries
-      export PKG_CONFIG_PATH="$EPOXY_PREFIX/lib/qemu-virgl/pkgconfig:$PKG_CONFIG_PATH"
-
-      if [ "$OPENGL_CORE" = "true" ]; then
-        echo "Using OpenGL Core mode (with stub EGL headers)"
-
-        # Create stub epoxy/egl.h directly in the QEMU build directory
-        mkdir -p ../include/epoxy
-        cat > ../include/epoxy/egl.h << 'EOF'
-/* Stub EGL header for OpenGL Core build */
-#ifndef EPOXY_EGL_H
-#define EPOXY_EGL_H
-typedef int EGLint;
-typedef unsigned int EGLenum;
-typedef void *EGLDisplay;
-typedef void *EGLSurface;
-typedef void *EGLContext;
-typedef void *EGLConfig;
-typedef unsigned int EGLBoolean;
-#define EGL_FALSE 0
-#define EGL_TRUE 1
-
-/* Function stubs */
-static inline EGLDisplay eglGetDisplay(void *native_display) { return NULL; }
-static inline EGLBoolean eglInitialize(EGLDisplay dpy, EGLint *major, EGLint *minor) { return EGL_FALSE; }
-static inline EGLBoolean eglTerminate(EGLDisplay dpy) { return EGL_FALSE; }
-static inline EGLBoolean eglChooseConfig(EGLDisplay dpy, const EGLint *attrib_list, EGLConfig *configs, EGLint config_size, EGLint *num_config) { return EGL_FALSE; }
-static inline EGLContext eglCreateContext(EGLDisplay dpy, EGLConfig config, EGLContext share_context, const EGLint *attrib_list) { return NULL; }
-#endif /* EPOXY_EGL_H */
-EOF
-
-        # Update workflow to create the header in the exact location:
-        # First check the actual include path from pkg-config
-        EPOXY_INCLUDE_DIR="$(pkg-config --variable=includedir epoxy)"
-        echo "Epoxy include dir from pkg-config: $EPOXY_INCLUDE_DIR"
-
-        # Create the stub header in both the pkg-config location and the fallback local path
-        sudo mkdir -p "${EPOXY_INCLUDE_DIR}/epoxy"
-        sudo bash -c 'cat > ${EPOXY_INCLUDE_DIR}/epoxy/egl.h << EOF
-/* Stub EGL header for OpenGL Core build */
-#ifndef EPOXY_EGL_H
-#define EPOXY_EGL_H
-typedef int EGLint;
-typedef unsigned int EGLenum;
-typedef void *EGLDisplay;
-typedef void *EGLSurface;
-typedef void *EGLContext;
-typedef void *EGLConfig;
-typedef unsigned int EGLBoolean;
-#define EGL_FALSE 0
-#define EGL_TRUE 1
-
-/* Function stubs */
-static inline EGLDisplay eglGetDisplay(void *native_display) { return NULL; }
-static inline EGLBoolean eglInitialize(EGLDisplay dpy, EGLint *major, EGLint *minor) { return EGL_FALSE; }
-static inline EGLBoolean eglTerminate(EGLDisplay dpy) { return EGL_FALSE; }
-static inline EGLBoolean eglChooseConfig(EGLDisplay dpy, const EGLint *attrib_list, EGLConfig *configs, EGLint config_size, EGLint *num_config) { return EGL_FALSE; }
-static inline EGLContext eglCreateContext(EGLDisplay dpy, EGLConfig config, EGLContext share_context, const EGLint *attrib_list) { return NULL; }
-EOF'
-
-        # Verify the header was created correctly
-        sudo ls -l "${EPOXY_INCLUDE_DIR}/epoxy/"
-        sudo cat "${EPOXY_INCLUDE_DIR}/epoxy/egl.h"
-
-        # Set CFLAGS to include our header directory
-        export CFLAGS="-I$(pwd)/../include $CFLAGS"
-
-        # Also update the epoxy.pc file to indicate it has EGL support
-        # This is crucial for the build
-        EPOXY_PC="$EPOXY_PREFIX/lib/qemu-virgl/pkgconfig/epoxy.pc"
-        if [ -f "$EPOXY_PC" ]; then
-          echo "Setting epoxy_has_egl=1 in $EPOXY_PC"
-          # Create a temp file
-          TMP_PC=$(mktemp)
-          sed 's/epoxy_has_egl=0/epoxy_has_egl=1/g' "$EPOXY_PC" > "$TMP_PC"
-          # Check if the file needs to be updated with sudo
-          if [ -w "$EPOXY_PC" ]; then
-            # User has write permissions
-            cat "$TMP_PC" > "$EPOXY_PC"
-          else
-            # User doesn't have write permissions, try sudo
-            sudo cp "$TMP_PC" "$EPOXY_PC" || {
-              echo "WARNING: Could not update epoxy.pc, build may fail"
-            }
-          fi
-          rm -f "$TMP_PC"
-        fi
-
-        # Disable EGL support in QEMU
-        CONFIG_FLAGS="$CONFIG_FLAGS --disable-egl"
-      else
-        # Standard configuration with Angle
-        if ../configure --help | grep -q -- "--enable-egl-headless"; then
-          CONFIG_FLAGS="$CONFIG_FLAGS --enable-egl-headless"
-        fi
-      fi
-
-      # Run configuration with all the accumulated flags
-      echo "Running configure with: $CONFIG_FLAGS"
-      ../configure $CONFIG_FLAGS
-
-      # First dump the pkg-config information for debugging
-      pkg-config --cflags --libs epoxy
-      pkg-config --variable=includedir epoxy
-      pkg-config --variable=epoxy_has_egl epoxy
-
-      # Configure with extra verbosity
-      ../configure --disable-egl --enable-opengl --enable-virglrenderer --target-list=x86_64-softmmu,aarch64-softmmu -v
-
-      echo "Configuration complete. Build with:"
-      echo "cd $QEMU_PATH/build && make -j$(sysctl -n hw.ncpu)"
-      echo "Starting QEMU build..."
-      make -j$(sysctl -n hw.ncpu) || {
-        echo "Build failed! Check errors above."
-        exit 1
-      }
-      echo "QEMU build completed successfully."
-    EOS
-    (bin/"compile-qemu-virgl").chmod 0755
-
+    # Only install egl-optional patch when using OpenGL Core
     if build.with? "opengl-core"
-      (bin/"apply-headers-patch").write <<~EOS
-        #!/bin/bash
-        set -e
-
-        echo "Applying headers patch for OpenGL Core backend..."
-        echo "No headers need to be patched with this build."
-        echo "You can proceed directly to building QEMU."
-      EOS
-      (bin/"apply-headers-patch").chmod 0755
+      resource("egl-optional-patch").stage { cp "egl-optional.patch", "#{prefix}/patches/" }
     end
 
-    # Add qemu-virgl wrapper script
-    (bin/"qemu-virgl").write <<~EOS
-      #!/bin/bash
-      set -e
+    resource("qemu-v06-patch").stage { cp "qemu-v06.diff", "#{prefix}/patches/" } if File.exist?(resource("qemu-v06-patch").cached_download)
 
-      if [ $# -lt 1 ]; then
-        echo "Usage: $0 <qemu-executable> [qemu-args]"
-        echo "Example: $0 /path/to/qemu-system-x86_64 -m 4G -drive file=disk.qcow2"
-        exit 1
-      fi
+    # Install external scripts from the scripts directory
+    scripts_dir = File.expand_path("../scripts", __dir__)
+    ohai "Installing scripts from #{scripts_dir}"
 
-      QEMU_BIN=$1
-      shift
+    # Install all scripts from the scripts directory
+    %w[
+      apply-3dfx-patches
+      apply-headers-patch.sh
+      compile-qemu-virgl
+      fetch-qemu-version
+      install-qemu-deps
+      qemu-virgl
+      setup-qemu-virgl
+    ].each do |script|
+      script_path = File.join(scripts_dir, script)
+      if File.exist?(script_path)
+        # For apply-headers-patch.sh, install it with a different name
+        if script == "apply-headers-patch.sh"
+          bin.install script_path => "apply-headers-patch"
+        else
+          bin.install script_path
+        end
 
-      # Add current directory to DYLD_LIBRARY_PATH for ANGLE libraries
-      export DYLD_LIBRARY_PATH="#{libdir}:$DYLD_LIBRARY_PATH"
-
-      # Set environment variables for proper rendering
-      export LIBGL_ALWAYS_SOFTWARE=0
-      export GALLIUM_DRIVER=swr
-
-      # Debug information
-      echo "Running QEMU with ANGLE/virgl support"
-      echo "DYLD_LIBRARY_PATH: $DYLD_LIBRARY_PATH"
-
-      # Run QEMU with the specified arguments
-      echo "Executing: $QEMU_BIN $@"
-      exec "$QEMU_BIN" "$@"
-    EOS
-    (bin/"qemu-virgl").chmod 0755
-
-    # Add a setup-angle-env script
-    (bin/"setup-angle-env").write <<~EOS
-      #!/bin/bash
-      set -e
-
-      echo "Setting up environment for ANGLE-enabled QEMU..."
-
-      # Create directory for the DYLD_LIBRARY_PATH if using custom location
-      export DYLD_LIBRARY_PATH="#{libdir}:$DYLD_LIBRARY_PATH"
-
-      # Show configured paths
-      echo "ANGLE libraries path: #{libdir}"
-      echo "DYLD_LIBRARY_PATH: $DYLD_LIBRARY_PATH"
-
-      echo "Environment is now ready for ANGLE-enabled QEMU"
-      echo "Run QEMU with: qemu-virgl /path/to/qemu-system-x86_64 [options]"
-    EOS
-    (bin/"setup-angle-env").chmod 0755
+        # Make the script executable
+        (bin/File.basename(script.sub('.sh', ''))).chmod 0755
+      else
+        opoo "Script not found: #{script_path}"
+      end
+    end
   end
 
   def caveats

@@ -29,13 +29,13 @@ else
 fi
 
 # Setup PKG_CONFIG_PATH for QEMU Virgl dependencies
-export PKG_CONFIG_PATH="$BREW_PREFIX/opt/homebrew-qemu-virgl-deps/lib/pkgconfig:$PKG_CONFIG_PATH"
+export PKG_CONFIG_PATH="$BREW_PREFIX/opt/qemu-virgl-deps/lib/pkgconfig:$PKG_CONFIG_PATH"
 
 # Add this before running ../configure
 # Set PKG_CONFIG_PATH to find libepoxy without EGL
-export PKG_CONFIG_PATH="#{libdir}/pkgconfig:$PKG_CONFIG_PATH"
+export PKG_CONFIG_PATH="$BREW_PREFIX/opt/qemu-virgl-deps/lib/pkgconfig:$PKG_CONFIG_PATH"
 # Explicitly set CFLAGS to include the correct dirs but exclude EGL
-export CFLAGS="-DGL_SILENCE_DEPRECATION -I#{opt_include}/qemu-virgl/epoxy $CFLAGS"
+export CFLAGS="-DGL_SILENCE_DEPRECATION -I$BREW_PREFIX/opt/qemu-virgl-deps/include/epoxy $CFLAGS"
 
 # Construct CFLAGS with the necessary include paths.
 # In OpenGL Core mode, we do not add the angle include directory
@@ -45,7 +45,7 @@ export CFLAGS="-F$SDK_PATH/System/Library/Frameworks \
 $ANGLE_INCLUDE $CFLAGS"
 
 # Setup LDFLAGS with the necessary library paths.
-export LDFLAGS="-F$SDK_PATH/System/Library/Frameworks -L$BREW_PREFIX/opt/homebrew-qemu-virgl-deps/lib $LDFLAGS"
+export LDFLAGS="-F$SDK_PATH/System/Library/Frameworks -L$BREW_PREFIX/opt/qemu-virgl-deps/lib $LDFLAGS"
 
 export OBJCFLAGS="-F$SDK_PATH/System/Library/Frameworks $OBJCFLAGS"
 
@@ -58,7 +58,7 @@ if [ "$BUILD_OPENGL_CORE" == "1" ]; then
   echo "OpenGL Core build enabled. Applying EGL patch..."
   # Change to the directory where this script is located, then use an absolute path.
   SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-  PATCH_SCRIPT="$SCRIPT_DIR/scripts/apply-egl-patch.sh"
+  PATCH_SCRIPT="$BREW_PREFIX/opt/qemu-virgl-deps/bin/apply-egl-patch"
   if [ ! -f "$PATCH_SCRIPT" ]; then
     echo "Error: Patch script not found at $PATCH_SCRIPT"
     exit 1
@@ -70,8 +70,10 @@ if [ "$BUILD_OPENGL_CORE" == "1" ]; then
   "$PATCH_SCRIPT"
 fi
 
-# OpenGL Core configuration
+# Just use one variable (OPENGL_CORE) and standardize on boolean values
 if [ "$OPENGL_CORE" = "true" ]; then
+  # OpenGL Core mode configuration
+
   # Set environment variable for OpenGL Core build mode
   export BUILD_OPENGL_CORE=1
   
@@ -101,7 +103,7 @@ EOF
   # Add this include dir to CFLAGS
   export CFLAGS="-I$QEMU_INCLUDE_DIR $CFLAGS"
 else
-  # Standard configuration with Angle
+  # ANGLE mode configuration
   ANGLE_INCLUDE="-I$BREW_PREFIX/opt/homebrew-qemu-virgl-deps/include/angle"
 fi
 

@@ -1,8 +1,25 @@
 #!/bin/bash
+set -e
+echo "Installing QEMU dependencies..."
 
-echo "Installing all dependencies required for building QEMU..."
-brew install $(brew deps --include-build qemu)
+# Check for existing installations to avoid unnecessary rebuilds
+for dep in sdl3 sdl2 sdl2_image ninja cmake meson pkg-config; do
+  if ! brew list --formula $dep &>/dev/null; then
+    echo "Installing $dep..."
+    MISSING_DEPS="$MISSING_DEPS $dep"
+  fi
+done
 
-echo ""
-echo "All QEMU dependencies installed."
-echo "You can now build QEMU with Virgl support."
+if [ -n "$MISSING_DEPS" ]; then
+  brew install $MISSING_DEPS
+else
+  echo "All dependencies already installed."
+fi
+
+# Also install our own package
+brew install startergo/qemu-virgl/qemu-virgl-deps
+echo "QEMU dependencies installed successfully."
+echo "Next steps:"
+echo "1. Fetch QEMU: fetch-qemu-version <version> <destination>"
+echo "2. Apply patches: apply-3dfx-patches <qemu-path>"
+echo "3. Build QEMU: compile-qemu-virgl <qemu-path>"

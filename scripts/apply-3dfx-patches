@@ -1,4 +1,5 @@
 #!/bin/bash
+set -e  # Exit on any error
 
 # Check if source directory is provided
 if [ -z "$1" ]; then
@@ -18,10 +19,8 @@ fi
 SDL_VERSION=$(sdl2-config --version)
 SDL_MAJOR=$(echo $SDL_VERSION | cut -d. -f1)
 SDL_MINOR=$(echo $SDL_VERSION | cut -d. -f2)
-SDL_MICRO=$(echo $SDL_VERSION | cut -d. -f3)
 
 # SDL 2.28.0 or newer might have the virgl patches incorporated
-# Reference: https://github.com/libsdl-org/SDL/issues/4986
 if [ "$SDL_MAJOR" -gt 2 ] || ([ "$SDL_MAJOR" == 2 ] && [ "$SDL_MINOR" -ge 28 ]); then
   echo "Note: Your SDL2 version ($SDL_VERSION) might already include virgl patches."
   echo "Some of the patches might not be necessary or could conflict."
@@ -33,11 +32,8 @@ if [ "$SDL_MAJOR" -gt 2 ] || ([ "$SDL_MAJOR" == 2 ] && [ "$SDL_MINOR" -ge 28 ]);
   fi
 fi
 
-# Check QEMU version - patches are compatible with specific versions
-COMPATIBLE_VERSIONS=("9.2.1" "8.2.1")
-
-# Define the patch directory dynamically based on Homebrew prefix
-PATCH_DIR="$(brew --prefix)/opt/homebrew-qemu-virgl-deps/patches"
+# Define the patch directory
+PATCH_DIR="$(brew --prefix)/opt/qemu-virgl-deps/patches"
 
 # Verify that the patch directory exists
 if [ ! -d "$PATCH_DIR" ]; then
@@ -45,14 +41,23 @@ if [ ! -d "$PATCH_DIR" ]; then
   exit 1
 fi
 
-# Apply patches
-for version in "${COMPATIBLE_VERSIONS[@]}"; do
-  if [ -f "$PATCH_DIR/qemu-$version-3dfx.patch" ]; then
-    echo "Applying 3dfx patch for QEMU version $version..."
-    patch -p1 -d "$QEMU_SRC" < "$PATCH_DIR/qemu-$version-3dfx.patch"
-  else
-    echo "Warning: Patch for QEMU version $version not found in $PATCH_DIR"
-  fi
-done
+# Apply the virgl patches
+echo "Applying virgl patches from $PATCH_DIR..."
 
-echo "3dfx patches applied successfully (if compatible patches were found)."
+# Main EGL optional patch
+if [ -f "$PATCH_DIR/egl-optional.patch" ]; then
+  echo "Applying EGL optional patch..."
+  patch -p1 -d "$QEMU_SRC" < "$PATCH_DIR/egl-optional.patch" || {
+    echo "Warning: EGL optional patch failed, it may already be applied."
+  }
+fi
+
+# Apply Virgil3D with SDL2 OpenGL patch
+if [ -f "$PATCH_DIR/0001-Virgil3D-with-SDL2-OpenGL.patch" ]; then
+  echo "Applying Virgil3D with SDL2 OpenGL patch..."
+  patch -p1 -d "$QEMU_SRC" < "$PATCH_DIR/0001-Virgil3D-with-SDL2-OpenGL.patch" || {
+    echo "Warning: SDL2 OpenGL patch failed, it may already be applied."
+  }
+fi
+
+echo "Patches applied. Now you can build QEMU with: compile-qemu-virgl $QEMU_SRC"

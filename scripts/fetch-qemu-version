@@ -4,6 +4,14 @@
 QEMU_VERSION="${1:-9.2.1}"
 TARGET_DIR="${2:-source/qemu}"
 
+# Check for required commands
+for cmd in git curl; do
+  if ! command -v $cmd &> /dev/null; then
+    echo "Error: Required command '$cmd' not found. Please install it."
+    exit 1
+  fi
+done
+
 # Check if version matches X.Y.Z format
 if ! [[ $QEMU_VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
   echo "Error: Version must be in X.Y.Z format (e.g., 9.2.1)"
@@ -52,11 +60,12 @@ fi
   # Apply version-specific patches
   if [ "$QEMU_VERSION" == "9.2.1" ]; then
     # Apply startergo's v06 patch for QEMU 9.2.1
-    PATCH_PATH="$(brew --prefix)/opt/homebrew-qemu-virgl-deps/patches/qemu-v06.diff"
+    PATCH_PATH="$(brew --prefix)/opt/qemu-virgl-deps/patches/qemu-v06.diff"
+    # Copy patch to target directory and apply from there
     if [ -f "$PATCH_PATH" ]; then
       echo "Applying v06 patch for QEMU 9.2.1..."
-      cp "$PATCH_PATH" .
-      git -C "$TARGET_DIR" apply ../qemu-v06.diff
+      cp "$PATCH_PATH" "$TARGET_DIR/"
+      (cd "$TARGET_DIR" && git apply "qemu-v06.diff" && rm "qemu-v06.diff")
     else
       echo "Error: Patch file not found: $PATCH_PATH"
       exit 1
@@ -66,6 +75,12 @@ fi
     echo "QEMU 8.2.1 cloned. You'll need to apply the 3dfx patches separately:"
     echo "apply-3dfx-patches $TARGET_DIR"
   fi
+
+  # Define resource for QEMU v06 patch
+  resource "qemu-v06-patch" do
+    url "https://raw.githubusercontent.com/startergo/homebrew-qemu-virgl/master/Patches/qemu-v06.diff"
+    sha256 "61e9138e102a778099b96fb00cffce2ba65040c1f97f2316da3e7ef2d652034b" 
+  end
   
   echo ""
   echo "QEMU $QEMU_VERSION prepared in $TARGET_DIR"
