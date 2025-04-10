@@ -26,43 +26,12 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    # Step 2: Check and repair formula syntax
-    - name: Check and repair formula syntax
+    # Step 2: Basic formula check
+    - name: Check formula syntax
       run: |
-        echo "Checking formula for syntax errors..."
-        
-        # Display the formula for debugging
-        cat Formula/qemu-virgl-deps.rb
-        
-        # Fix duplicated URL keyword issue (line 51)
-        sed -i '' 's/url "url "/url "/' Formula/qemu-virgl-deps.rb
-        
-        # Check if we need to fix mismatched if/else/end blocks
-        ruby -c Formula/qemu-virgl-deps.rb || {
-          echo "Attempting to fix Ruby syntax errors..."
-          
-          # Create a backup of the formula
-          cp Formula/qemu-virgl-deps.rb Formula/qemu-virgl-deps.rb.bak
-          
-          # Try to match unclosed blocks or statements
-          grep -n "if\|else\|end\|do" Formula/qemu-virgl-deps.rb
-          
-          # Add missing 'end' statements if needed
-          # This is a simplified attempt - might need manual intervention
-          MISSING_ENDS=$(grep -o "if\|do" Formula/qemu-virgl-deps.rb | wc -l)
-          EXISTING_ENDS=$(grep -o "end" Formula/qemu-virgl-deps.rb | wc -l)
-          
-          if [ $MISSING_ENDS -gt $EXISTING_ENDS ]; then
-            echo "Detected $((MISSING_ENDS - EXISTING_ENDS)) missing 'end' statements"
-            echo "end" >> Formula/qemu-virgl-deps.rb
-          fi
-        }
-        
-        # Check if syntax is now valid
+        echo "Checking formula for syntax..."
         ruby -c Formula/qemu-virgl-deps.rb
-        
-        # Run brew style to check for other issues
-        brew style --fix Formula/qemu-virgl-deps.rb || true
+        brew style Formula/qemu-virgl-deps.rb || true
 
     # Step 3: Tap the repository
     - name: Tap the repository
@@ -89,7 +58,7 @@ jobs:
     - name: Configure and build QEMU
       run: |
         compile-qemu-virgl source/qemu ${{ matrix.opengl_core && '--opengl-core' || '' }}
-        cd source/qemu && make -j$(sysctl -n hw.ncpu)
+        cd source/qemu/build && make -j$(sysctl -n hw.ncpu)
 
     # Step 8: Verify QEMU execution
     - name: Verify QEMU execution
