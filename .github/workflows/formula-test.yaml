@@ -64,7 +64,32 @@ jobs:
     # Step 7: Configure and build QEMU
     - name: Build QEMU with OpenGL Core
       run: |
-        # First create the stub EGL header
+        # First create a modification to the epoxy.pc file to indicate it has EGL support
+        # This is needed because QEMU's build system checks for epoxy/egl.h via pkg-config
+        EPOXY_PC="$(brew --prefix)/opt/qemu-virgl-deps/lib/qemu-virgl/pkgconfig/epoxy.pc"
+        if [ -f "$EPOXY_PC" ]; then
+          echo "Original epoxy.pc:"
+          cat "$EPOXY_PC"
+          
+          # Create a modified version with epoxy_has_egl=1
+          TMP_PC=$(mktemp)
+          sed 's/epoxy_has_egl=0/epoxy_has_egl=1/g' "$EPOXY_PC" > "$TMP_PC"
+          
+          # Check if the file needs to be updated
+          if [ -w "$EPOXY_PC" ]; then
+            # User has write permissions
+            cat "$TMP_PC" > "$EPOXY_PC"
+          else
+            # Try with sudo if needed
+            sudo cp "$TMP_PC" "$EPOXY_PC" || echo "WARNING: Could not update epoxy.pc"
+          fi
+          rm -f "$TMP_PC"
+          
+          echo "Modified epoxy.pc:"
+          cat "$EPOXY_PC"
+        fi
+        
+        # Create stub EGL header
         cd source/qemu
         mkdir -p include/epoxy
         cat > include/epoxy/egl.h << 'EOF'
@@ -72,25 +97,40 @@ jobs:
 #ifndef EPOXY_EGL_H
 #define EPOXY_EGL_H
 typedef int EGLint;
+typedef unsigned int EGLenum;
 typedef void *EGLDisplay;
 typedef void *EGLSurface;
 typedef void *EGLContext;
 typedef void *EGLConfig;
+typedef unsigned int EGLBoolean;
 #define EGL_FALSE 0
 #define EGL_TRUE 1
-#endif
+#endif /* EPOXY_EGL_H */
 EOF
         
-        # Then run the build script
+        # Then run the build script with verbosity for debugging
+        PKG_CONFIG_PATH="$(brew --prefix)/opt/qemu-virgl-deps/lib/qemu-virgl/pkgconfig:$PKG_CONFIG_PATH" \
         compile-qemu-virgl source/qemu --opengl-core
         
-        # If the script fails, try manual configuration
+        # If the script fails, try manual configuration with more debug info
         if [ $? -ne 0 ]; then
+          echo "=== Standard build failed, trying manual build with more debugging ==="
           cd source/qemu
-          # Configure with the right flags manually
+          
+          # Dump pkg-config info for debugging
+          export PKG_CONFIG_PATH="$(brew --prefix)/opt/qemu-virgl-deps/lib/qemu-virgl/pkgconfig:$PKG_CONFIG_PATH"
+          echo "PKG_CONFIG_PATH=$PKG_CONFIG_PATH"
+          pkg-config --modversion epoxy
+          pkg-config --variable=epoxy_has_egl epoxy
+          
+          # Create build directory
           mkdir -p build
           cd build
+          
+          # Configure with explicit flags and debugging
           CFLAGS="-I../include" ../configure --disable-egl --enable-opengl --enable-virglrenderer
+          
+          # Build with make
           make -j$(sysctl -n hw.ncpu)
         fi
 

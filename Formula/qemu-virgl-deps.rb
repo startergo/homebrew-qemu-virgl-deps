@@ -472,14 +472,20 @@ class QemuVirglDeps < Formula
       mkdir -p build
       cd build
       
+      # Get paths from brew
+      BREW_PREFIX=$(brew --prefix)
+      EPOXY_PREFIX="$BREW_PREFIX/opt/qemu-virgl-deps"
+      
       # Basic configure flags with specific target list for faster builds
       CONFIG_FLAGS="--enable-sdl --enable-opengl --enable-virglrenderer --target-list=x86_64-softmmu,aarch64-softmmu"
       
-      # Add pkg-config path
-      export PKG_CONFIG_PATH="#{libdir}/pkgconfig:$PKG_CONFIG_PATH"
+      # Add pkg-config path to find the right libraries
+      export PKG_CONFIG_PATH="$EPOXY_PREFIX/lib/qemu-virgl/pkgconfig:$PKG_CONFIG_PATH"
       
       if [ "$OPENGL_CORE" = "true" ]; then
-        # Create the stub EGL header inside a directory that can be added to include path
+        echo "Using OpenGL Core mode (with stub EGL headers)"
+        
+        # Create stub epoxy/egl.h directly in the QEMU build directory
         mkdir -p ../include/epoxy
         cat > ../include/epoxy/egl.h << 'EOF'
 /* Stub EGL header for OpenGL Core build */
@@ -497,10 +503,31 @@ typedef unsigned int EGLBoolean;
 #endif /* EPOXY_EGL_H */
 EOF
         
-        # Set up the C include path to find our stub header
+        # Set CFLAGS to include our header directory
         export CFLAGS="-I$(pwd)/../include $CFLAGS"
         
-        # Use disable-egl instead of non-existent --enable-opengl-core
+        # Also update the epoxy.pc file to indicate it has EGL support
+        # This is crucial for the build
+        EPOXY_PC="$EPOXY_PREFIX/lib/qemu-virgl/pkgconfig/epoxy.pc"
+        if [ -f "$EPOXY_PC" ]; then
+          echo "Setting epoxy_has_egl=1 in $EPOXY_PC"
+          # Create a temp file
+          TMP_PC=$(mktemp)
+          sed 's/epoxy_has_egl=0/epoxy_has_egl=1/g' "$EPOXY_PC" > "$TMP_PC"
+          # Check if the file needs to be updated with sudo
+          if [ -w "$EPOXY_PC" ]; then
+            # User has write permissions
+            cat "$TMP_PC" > "$EPOXY_PC"
+          else
+            # User doesn't have write permissions, try sudo
+            sudo cp "$TMP_PC" "$EPOXY_PC" || {
+              echo "WARNING: Could not update epoxy.pc, build may fail"
+            }
+          fi
+          rm -f "$TMP_PC"
+        fi
+        
+        # Disable EGL support in QEMU
         CONFIG_FLAGS="$CONFIG_FLAGS --disable-egl"
       else
         # Standard configuration with Angle
@@ -509,7 +536,7 @@ EOF
         fi
       fi
       
-      # Run configuration
+      # Run configuration with all the accumulated flags
       echo "Running configure with: $CONFIG_FLAGS"
       ../configure $CONFIG_FLAGS
       
