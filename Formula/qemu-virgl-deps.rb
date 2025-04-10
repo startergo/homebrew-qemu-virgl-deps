@@ -4,12 +4,7 @@ class QemuVirglDeps < Formula
   url "https://github.com/startergo/homebrew-qemu-virgl-deps/archive/refs/tags/v20250315.1.tar.gz"
   version "20250316.2"
   sha256 "0c8f80404cca5586393e0c44ce9cacfe13d072467b1f7d87a9063aef9de5fb62"
-  license "MIT"
-
-  # Add a version variable at the top for tracking virglrenderer-specific version components
-  VIRGLRENDERER_VERSION = "1.1.0"
-  LIBEPOXY_VERSION = "1.5.11"
-  # Then use these variables throughout the formula
+  license "MIT" 
 
   # Make keg-only to prevent automatic linking that causes errors with dylib IDs
   keg_only "this formula is only used by QEMU and shouldn't be linked"
@@ -556,6 +551,7 @@ class QemuVirglDeps < Formula
         return v > 0 ? 0 : 1;
       }
     EOS
+    
     system ENV.cc, "test.c", "-I#{include}/qemu-virgl/virgl", 
            "-L#{lib}/qemu-virgl", "-lvirglrenderer", "-o", "test"
     system "./test"
