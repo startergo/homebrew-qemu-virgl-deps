@@ -1,4 +1,8 @@
 class QemuVirglDeps < Formula
+  # Define version constants at the top
+  VIRGLRENDERER_VERSION = "1.1.0"
+  LIBEPOXY_VERSION = "1.5.11"
+  
   desc "Dependencies for QEMU with Virgil 3D acceleration"
   homepage "https://github.com/startergo/qemu-virgl-deps"
   url "https://github.com/startergo/homebrew-qemu-virgl-deps/archive/refs/tags/v20250315.1.tar.gz"
@@ -491,6 +495,12 @@ class QemuVirglDeps < Formula
 
         For more information, visit:
            https://github.com/startergo/qemu-virgl-deps
+
+        The correct way to install this formula is:
+          brew install startergo/qemu-virgl-deps/qemu-virgl-deps --with-opengl-core
+
+        Do not use:
+          brew install --with-opengl-core startergo/qemu-virgl-deps/qemu-virgl-deps
       EOS
     else
       <<~EOS

@@ -32,7 +32,7 @@ jobs:
     - name: Install formula with OpenGL Core
       run: |
         echo "Installing with OpenGL Core profile..."
-        brew install qemu-virgl-deps --with-opengl-core
+        brew install startergo/qemu-virgl-deps/qemu-virgl-deps --with-opengl-core
 
     # Step 4.5: Ensure helper scripts are in PATH
     - name: Setup PATH for helper scripts
