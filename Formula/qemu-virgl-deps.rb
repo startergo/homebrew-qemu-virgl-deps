@@ -78,6 +78,10 @@ class QemuVirglDeps < Formula
   end
 
   def install
+    # Add flags to silence OpenGL deprecation warnings on macOS
+    ENV.append "CFLAGS", "-DGL_SILENCE_DEPRECATION"
+    ENV.append "CXXFLAGS", "-DGL_SILENCE_DEPRECATION"
+
     libdir = lib/"qemu-virgl"
     includedir = include/"qemu-virgl"
     mkdir_p [libdir, includedir]
@@ -161,30 +165,17 @@ class QemuVirglDeps < Formula
         ENV["LDFLAGS"] = "-F#{sdk_path}/System/Library/Frameworks -L#{libdir} -headerpad_max_install_names"
         
         # Get available meson options properly
-        ohai "Checking virglrenderer meson options"
-        system "meson", "introspect", "--buildoptions", ".", "2>&1" rescue nil
+        ohai "Available virglrenderer meson options"
+        system "meson", "setup", "--help"
         
-        # Try to get available options in JSON format and parse properly
-        available_options_json = `meson introspect --buildoptions . 2>/dev/null || echo '{}'`
-        available_options = available_options_json.scan(/"name":\s*"([^"]+)"/).flatten
-        ohai "Available meson options: #{available_options.join(', ')}"
+        # Use only the platforms option which is guaranteed to be supported
+        mkdir_p "build"
+        system "meson", "setup", "build",
+               "--prefix=#{prefix}",
+               "--libdir=#{libdir}",
+               "--includedir=#{includedir}/virgl",
+               "-Dplatforms=sdl2"
         
-        # Base meson options that are always needed
-        meson_opts = ["--prefix=#{prefix}", 
-                     "--libdir=#{libdir}", 
-                     "--includedir=#{includedir}/virgl", 
-                     "-Dplatforms=sdl2"]
-        
-        # Only add minigbm option if it's available
-        if available_options.include?("minigbm")
-          ohai "Adding -Dminigbm=disabled option"
-          meson_opts << "-Dminigbm=disabled"
-        end
-        
-        # Display final meson options for debugging
-        ohai "Using meson options: #{meson_opts.join(' ')}"
-        
-        system "meson", "setup", "build", *meson_opts
         system "meson", "compile", "-C", "build"
         system "meson", "install", "-C", "build"
       end
