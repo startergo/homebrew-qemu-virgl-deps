@@ -6,9 +6,6 @@ class QemuVirglDeps < Formula
   license "MIT"
   version "20250316.2" # Updated version with patches applied
 
-  # Only build for specific architectures
-  depends_on arch: [:x86_64, :arm64]
-
   # Make keg-only to prevent automatic linking that causes errors with dylib IDs
   keg_only "this formula is only used by QEMU and shouldn't be linked"
 
@@ -85,11 +82,6 @@ class QemuVirglDeps < Formula
     includedir = include/"qemu-virgl"
     mkdir_p [libdir, includedir]
     sdk_path = Utils.safe_popen_read("xcrun", "--show-sdk-path").chomp
-
-    # Make sure we build for the current architecture
-    ENV.prepend_path "CFLAGS", "-arch #{Hardware::CPU.arch}"
-    ENV.prepend_path "CPPFLAGS", "-arch #{Hardware::CPU.arch}"
-    ENV.prepend_path "LDFLAGS", "-arch #{Hardware::CPU.arch}"
 
     # Set up PKG_CONFIG_PATH for dependencies
     ENV.append_path "PKG_CONFIG_PATH", "#{libdir}/pkgconfig"
@@ -322,28 +314,17 @@ class QemuVirglDeps < Formula
           cp "#{angle_headers}/libGLESv2.dylib", "#{libdir}/"
           chmod 0644, "#{libdir}/libEGL.dylib"
           chmod 0644, "#{libdir}/libGLESv2.dylib"
-
+          
           # Create symlinks in the regular lib directory
           ln_sf "#{libdir}/libEGL.dylib", "#{lib}/libEGL.dylib"
           ln_sf "#{libdir}/libGLESv2.dylib", "#{lib}/libGLESv2.dylib"
         end
         
-        # Ensure pkg-config can find our libepoxy
-        ENV["PKG_CONFIG_PATH"] = "#{libdir}/pkgconfig:#{angle_headers}:#{ENV["PKG_CONFIG_PATH"]}"
-        
-        # Get available meson options
-        ohai "Checking available meson options"
-        available_options_json = `meson introspect --buildoptions . 2>/dev/null || echo '{}'`
-        available_options = available_options_json.scan(/"name":\s*"([^"]+)"/).flatten
-        ohai "Available meson options: #{available_options.join(', ')}"
-        
-        # Base meson options that are always needed
+        # Base meson options - keep it simple without problematic options
         meson_opts = ["--prefix=#{prefix}", 
                      "--libdir=#{libdir}", 
-                     "--includedir=#{includedir}/virgl"]
-        
-        # Add platform option which should exist in either version
-        meson_opts << "-Dplatforms=sdl2"
+                     "--includedir=#{includedir}/virgl",
+                     "-Dplatforms=sdl2"]
         
         # Display final meson options for debugging
         ohai "Using meson options: #{meson_opts.join(' ')}"
@@ -460,8 +441,8 @@ class QemuVirglDeps < Formula
       mkdir -p build
       cd build
       
-      # Basic configure flags
-      CONFIG_FLAGS="--enable-sdl --enable-opengl --enable-virglrenderer"
+      # Basic configure flags with specific target list for faster builds
+      CONFIG_FLAGS="--enable-sdl --enable-opengl --enable-virglrenderer --target-list=x86_64-softmmu,aarch64-softmmu"
       
       # Add pkg-config path
       export PKG_CONFIG_PATH="#{libdir}/pkgconfig:$PKG_CONFIG_PATH"
@@ -490,6 +471,7 @@ class QemuVirglDeps < Formula
       fi
       
       # Run configuration
+      echo "Running configure with: $CONFIG_FLAGS"
       ../configure $CONFIG_FLAGS
       
       echo "Configuration complete. Build with:"
