@@ -11,7 +11,7 @@ Last updated: 2025-03-15
 ## Features
 
 - Native OpenGL acceleration for QEMU virtual machines on macOS
-- Support for multiple QEMU versions (9.2.1, 8.2.1)
+- Support for multiple QEMU versions (9.2.1, 8.2.10)
 - Two rendering backends:
   - ANGLE-based approach (stable, recommended)
   - OpenGL Core backend (kjliew's approach, potentially higher performance)
@@ -43,7 +43,7 @@ brew install qemu-virgl-deps --without-prebuilt-angle
    install-qemu-deps
    ```
 
-2. **Fetch QEMU source** (recommended versions: 9.2.1, 8.2.1, 7.2.0, or 6.1.0):
+2. **Fetch QEMU source** (recommended versions: 9.2.1, 8.2.10, 7.2.0, or 6.1.0):
    ```bash
    fetch-qemu-version 9.2.1 source/qemu
    ```

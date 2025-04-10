@@ -313,7 +313,7 @@ jobs:
     # Step 5: Fetch QEMU source
     - name: Fetch QEMU source
       run: |
-        fetch-qemu-version 9.2.1 source/qemu
+        fetch-qemu-version 9.2.10 source/qemu
 
     # Step 6: Configure and build QEMU
     - name: Configure and build QEMU

@@ -4,7 +4,7 @@ class QemuVirglDeps < Formula
   url "https://github.com/startergo/homebrew-qemu-virgl-deps/archive/refs/tags/v20250315.1.tar.gz"
   version "20250316.2"
   sha256 "0c8f80404cca5586393e0c44ce9cacfe13d072467b1f7d87a9063aef9de5fb62"
-  license "MIT" 
+  license "MIT"
 
   # Make keg-only to prevent automatic linking that causes errors with dylib IDs
   keg_only "this formula is only used by QEMU and shouldn't be linked"
@@ -93,14 +93,14 @@ class QemuVirglDeps < Formula
 
   def install
     # 1. Create directories first
-    mkdir_p "#{prefix}/lib/pkgconfig"
+    mkdir_p "#{lib}/pkgconfig"
     libdir = lib/"qemu-virgl"
     includedir = include/"qemu-virgl"
     mkdir_p [libdir, includedir]
-    mkdir_p "#{libdir}/pkgconfig" 
+    mkdir_p "#{libdir}/pkgconfig"
 
     # 2. Set up PKG_CONFIG_PATH to include these directories
-    ENV.append_path "PKG_CONFIG_PATH", "#{prefix}/lib/pkgconfig"
+    ENV.append_path "PKG_CONFIG_PATH", "#{lib}/pkgconfig"
     ENV.append_path "PKG_CONFIG_PATH", "#{libdir}/pkgconfig"
 
     # 3. Create the epoxy.pc file
@@ -127,13 +127,11 @@ class QemuVirglDeps < Formula
     ohai "PKG_CONFIG_PATH=#{ENV["PKG_CONFIG_PATH"]}"
     if system("pkg-config", "--exists", "epoxy")
       ohai "epoxy found via pkg-config"
-      epoxy_version = `pkg-config --modversion epoxy`.chomp
-      ohai "epoxy version: #{epoxy_version}"
     else
       ohai "ERROR: epoxy not found"
     end
 
-    if !system("pkg-config", "--atleast-version=1.5.0", "epoxy")
+    unless system("pkg-config", "--atleast-version=1.5.0", "epoxy")
       opoo "epoxy version may be too old, recommended version is at least 1.5.0"
     end
 
@@ -321,7 +319,9 @@ class QemuVirglDeps < Formula
       # Enhance the debugging before starting the build
       ohai "Verifying ANGLE headers"
       if File.directory?("#{angle_headers}/include")
-        system "find", "#{angle_headers}/include", "-type", "f", "-name", "*.h"
+        header_files = Dir["#{angle_headers}/include/**/*.h"]
+        ohai "Found #{header_files.count} header files in #{angle_headers}/include"
+        header_files.each { |f| ohai "  #{f}" } unless header_files.empty?
         begin
           system "pkg-config", "--debug", "--exists", "egl"
         rescue
@@ -361,16 +361,16 @@ class QemuVirglDeps < Formula
         # Apply the EGL optional patch
         egl_patch_file = Pathname.new(buildpath/"egl-optional-patch")
         resource("egl-optional-patch").stage { egl_patch_file.install "egl-optional.patch" }
-        if !system("patch", "-p1", "-v", "-i", egl_patch_file/"egl-optional.patch")
+        unless system("patch", "-p1", "-v", "-i", egl_patch_file/"egl-optional.patch")
           ohai "Patch didn't apply cleanly, attempting manual fix..."
           # Look for the pattern in meson.build and modify it
           if File.exist?("meson.build")
             content = File.read("meson.build")
-            if content.match?(/if cc\.has_header\('epoxy\/egl\.h'/)
+            if content.include?("if cc.has_header('epoxy/egl.h'")
               # Insert the variable and modify the condition
               new_content = content.gsub(
-                /(if cc\.has_header\('epoxy\/egl\.h')/,
-                "# Make EGL headers optional when using OpenGL Core\n  need_egl = not get_option('opengl_core').enabled()\n\n  if (not need_egl) or \\1"
+                %r{(if cc\.has_header\('epoxy\/egl\.h')},
+                "# Make EGL headers optional when using OpenGL Core\n  need_egl = not get_option('opengl_core').enabled()\n\n  if (not need_egl) or \\1",
               )
               File.write("meson.build", new_content)
               ohai "Successfully applied manual EGL optional fix"
@@ -455,6 +455,14 @@ class QemuVirglDeps < Formula
         end
       else
         opoo "Script not found: #{script_path}"
+      end
+    end
+
+    %w[fetch-qemu-version apply-3dfx-patches compile-qemu-virgl].each do |cmd|
+      if File.executable?(bin/cmd)
+        ohai "#{cmd} is available and executable"
+      else
+        opoo "#{cmd} is not available or not executable"
       end
     end
   end
@@ -559,8 +567,8 @@ class QemuVirglDeps < Formula
         return v > 0 ? 0 : 1;
       }
     EOS
-    
-    system ENV.cc, "test.c", "-I#{include}/qemu-virgl/virgl", 
+
+    system ENV.cc, "test.c", "-I#{include}/qemu-virgl/virgl",
            "-L#{lib}/qemu-virgl", "-lvirglrenderer", "-o", "test"
     system "./test"
   end
