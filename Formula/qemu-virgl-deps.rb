@@ -276,9 +276,20 @@ class QemuVirglDeps < Formula
       
       mkdir -p "$DEST"
       cd "$DEST"
+      
+      # Download and extract in one step
       curl -L "https://download.qemu.org/qemu-${VERSION}.tar.xz" | tar xJf -
-      mv "qemu-${VERSION}"/* .
-      rmdir "qemu-${VERSION}"
+      
+      # Use cp instead of mv for more reliability, then remove the source dir
+      cp -R "qemu-${VERSION}/"* .
+      
+      # Check if there are hidden files and copy them too
+      if [ -n "$(ls -A "qemu-${VERSION}/" | grep '^\.')" ]; then
+        cp -R "qemu-${VERSION}"/.[!.]* . 2>/dev/null || true
+      fi
+      
+      # Remove the source directory with force
+      rm -rf "qemu-${VERSION}"
       
       echo "QEMU ${VERSION} fetched successfully to $DEST"
     EOS
