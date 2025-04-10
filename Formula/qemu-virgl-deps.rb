@@ -171,34 +171,55 @@ class QemuVirglDeps < Formula
     else
       ohai "Building with libepoxy and ANGLE support (EGL enabled)"
       
-      # Get ANGLE headers path from environment or use default
-      angle_headers = ENV.fetch("ANGLE_HEADERS_PATH", nil)
-      if angle_headers
-        ohai "Using ANGLE headers from: #{angle_headers}"
-        # Show the available headers for debugging
-        system "ls", "-la", angle_headers if File.directory?(angle_headers)
-      else
-        ohai "ANGLE_HEADERS_PATH not specified, using default paths"
-      end
+      # Get ANGLE headers path from environment or use the formula's builtin path
+      angle_headers = ENV.fetch("ANGLE_HEADERS_PATH", "#{buildpath}/angle")
+      ohai "Using ANGLE headers from: #{angle_headers}"
+
+      # Create proper include paths with absolute paths
+      angle_include_flags = "-I#{angle_headers}/include"
+
+      # Make pkg-config find our ANGLE .pc files
+      ENV.prepend_path "PKG_CONFIG_PATH", angle_headers
+
+      # Ensure the pkg-config files exist and have correct paths
+      mkdir_p "#{angle_headers}/include" unless Dir.exist?("#{angle_headers}/include")
+
+      # Create proper pkg-config files for ANGLE with absolute paths
+      File.write("#{angle_headers}/egl.pc", <<~EOS)
+        prefix=#{angle_headers}
+        exec_prefix=${prefix}
+        libdir=${prefix}
+        includedir=${prefix}/include
+
+        Name: egl
+        Description: ANGLE EGL implementation for macOS
+        Version: 1.0.0
+        Libs: -framework OpenGL
+        Cflags: -I${includedir}
+      EOS
+
+      File.write("#{angle_headers}/glesv2.pc", <<~EOS)
+        prefix=#{angle_headers}
+        exec_prefix=${prefix}
+        libdir=${prefix}
+        includedir=${prefix}/include
+
+        Name: glesv2
+        Description: ANGLE OpenGL ES 2.0 implementation for macOS
+        Version: 2.0.0
+        Libs: -framework OpenGL
+        Cflags: -I${includedir}
+      EOS
       
-      # Set include paths for ANGLE
-      angle_include_flags = ""
-      if angle_headers
-        angle_include_flags = "-I#{angle_headers}"
-        # Add main include directory
-        angle_include_flags += " -I#{angle_headers}/include" if File.directory?("#{angle_headers}/include")
-        # Add subdirectories
-        %w[EGL GLES GLES2 GLES3 KHR].each do |subdir|
-          if File.directory?("#{angle_headers}/include/#{subdir}")
-            angle_include_flags += " -I#{angle_headers}/include/#{subdir}"
-          end
-        end
+      # Enhance the debugging before starting the build
+
+      ohai "Verifying ANGLE headers"
+      if File.directory?("#{angle_headers}/include")
+        system "find", "#{angle_headers}/include", "-type", "f", "-name", "*.h" 
+        system "pkg-config", "--debug", "--exists", "egl" rescue puts "egl.pc not found or invalid"
+        system "pkg-config", "--debug", "--exists", "glesv2" rescue puts "glesv2.pc not found or invalid"
       end
 
-      if angle_headers && File.exist?("#{angle_headers}/egl.pc")
-        ENV.append_path "PKG_CONFIG_PATH", angle_headers
-      end
-      
       # Build libepoxy with EGL support for Angle
       resource("libepoxy-angle").stage do
         # Debug: Check if headers exist
@@ -213,9 +234,10 @@ class QemuVirglDeps < Formula
           end
         end
         
-        # Set environment variables for meson build
-        ENV["CFLAGS"] = "-I#{Formula["mesa"].opt_include} #{angle_include_flags} -F#{sdk_path}/System/Library/Frameworks"
+        # Set environment variables for meson build with absolute paths
+        ENV["CFLAGS"] = "-I#{Formula["mesa"].opt_include} -I#{angle_headers}/include -F#{sdk_path}/System/Library/Frameworks"
         ENV["CPPFLAGS"] = ENV["CFLAGS"]
+        ENV["LDFLAGS"] = "-F#{sdk_path}/System/Library/Frameworks -L#{libdir}"
         
         # Debug: Show environment variables
         ohai "Build environment:"
@@ -259,9 +281,7 @@ class QemuVirglDeps < Formula
                "--prefix=#{prefix}",
                "--libdir=#{libdir}",
                "--includedir=#{includedir}/virgl",
-               "-Dplatforms=auto",
-               "-Dminigbm=disabled",
-               "-Dangle=true"
+               "-Dplatforms=auto"
         
         system "meson", "compile", "-C", "build"
         system "meson", "install", "-C", "build"
@@ -382,16 +402,23 @@ class QemuVirglDeps < Formula
       
       if [ "$OPENGL_CORE" = "true" ]; then
         # OpenGL Core configuration (no EGL/Angle)
-        # Note: --disable-egl-headless might not be available in all QEMU versions
-        # Check QEMU version to see if this flag is supported
-        QEMU_VERSION=$(grep -oE 'VERSION=[0-9]+\\.[0-9]+\\.[0-9]+' ../VERSION | cut -d= -f2)
-        if [[ $(echo "$QEMU_VERSION 7.0.0" | tr " " "\\n" | sort -V | head -n1) == "7.0.0" ]]; then
-          # For QEMU 7.0.0 and newer, use --disable-egl-headless
-          CONFIG_FLAGS="$CONFIG_FLAGS --disable-egl-headless"
+        # Use grep to extract version
+        if [ -f ../VERSION ]; then
+          QEMU_VERSION=$(grep -o 'VERSION=[0-9]\\+\\.[0-9]\\+\\.[0-9]\\+' ../VERSION 2>/dev/null | cut -d= -f2 || echo "0.0.0")
+          MAJOR_VERSION=$(echo "$QEMU_VERSION" | cut -d. -f1)
+          if [ "$MAJOR_VERSION" -ge 7 ]; then
+            # For QEMU 7.0.0 and newer, use --disable-egl-headless
+            CONFIG_FLAGS="$CONFIG_FLAGS --disable-egl-headless"
+          fi
+        else
+          # If VERSION file not found, check configure help
+          if ../configure --help | grep -q -- "--disable-egl-headless"; then
+            CONFIG_FLAGS="$CONFIG_FLAGS --disable-egl-headless"
+          fi
         fi
       else
         # Standard configuration with Angle
-        if [[ -f ../configure --help | grep -q "egl-headless" ]]; then
+        if ../configure --help | grep -q -- "--enable-egl-headless"; then
           CONFIG_FLAGS="$CONFIG_FLAGS --enable-egl-headless"
         fi
       fi
