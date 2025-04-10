@@ -182,21 +182,28 @@ class QemuVirglDeps < Formula
 
       # Build virglrenderer without expecting EGL support
       virglrenderer_core_resource.stage do
+        # Apply patches first
         patch_file = Pathname.new(buildpath/"virgl-sdl-patch")
         resource("virgl-sdl-patch").stage { patch_file.install "0001-Virgil3D-with-SDL2-OpenGL.patch" }
         system "patch", "-p1", "-v", "-i", patch_file/"0001-Virgil3D-with-SDL2-OpenGL.patch"
         
+        # Also apply the GLSL patch
+        glsl_patch = Pathname.new(buildpath/"glsl-patch")
+        resource("glsl-patch").stage { glsl_patch.install "0002-Virgil3D-macOS-GLSL-version.patch" }
+        system "patch", "-p1", "-v", "-i", glsl_patch/"0002-Virgil3D-macOS-GLSL-version.patch"
+        
+        # Set environment for the build
         ENV["CFLAGS"] = "-DGL_SILENCE_DEPRECATION -F#{sdk_path}/System/Library/Frameworks -I#{includedir} -headerpad_max_install_names"
         ENV["LDFLAGS"] = "-F#{sdk_path}/System/Library/Frameworks -L#{libdir} -headerpad_max_install_names"
         
-        # Use only the platforms option which is guaranteed to be supported
+        # Use 'auto' platform instead of 'sdl2' as that's the valid option
         system "meson", "setup", "build",
                "--prefix=#{prefix}",
                "--libdir=#{libdir}",
                "--includedir=#{includedir}/virgl",
-               "-Dplatforms=sdl2"
+               "-Dplatforms=auto"  # Use auto which should pick up the SDL2 support from patches
         
-        system "meson", "compile", "-C", "build"
+        system "meson", "compile", "-C", "build", "-v"
         system "meson", "install", "-C", "build"
       end
     else
@@ -264,8 +271,7 @@ class QemuVirglDeps < Formula
 
       # Build libepoxy with EGL support for Angle
       resource("libepoxy-angle").stage do
-        # Add GL_SILENCE_DEPRECATION to all relevant source files
-        # This is safer than inreplace since it doesn't rely on specific patterns
+        # Add GL_SILENCE_DEPRECATION to all source files
         Dir.glob("src/*.{c,h}").each do |file|
           contents = File.read(file)
           unless contents.include?("GL_SILENCE_DEPRECATION")
@@ -280,26 +286,24 @@ class QemuVirglDeps < Formula
           end
         end
         
-        # Configure environment for the build
-        ENV["CFLAGS"] = "-DGL_SILENCE_DEPRECATION #{ENV["CFLAGS"]}"
-        ENV["CXXFLAGS"] = "-DGL_SILENCE_DEPRECATION #{ENV["CXXFLAGS"]}"
+        # Configure environment for the build with explicit flags to ignore warnings
+        ENV["CFLAGS"] = "-DGL_SILENCE_DEPRECATION -Wno-deprecated-declarations #{ENV["CFLAGS"]}"
+        ENV["CXXFLAGS"] = "-DGL_SILENCE_DEPRECATION -Wno-deprecated-declarations #{ENV["CXXFLAGS"]}"
         ENV["CPPFLAGS"] = "-I#{Formula["mesa"].opt_include} -I#{angle_headers}/include #{ENV["CPPFLAGS"]}"
         ENV["LDFLAGS"] = "-F#{sdk_path}/System/Library/Frameworks -L#{libdir} #{ENV["LDFLAGS"]}"
         
-        # Use a more conservative meson setup to avoid potential issues
-        mkdir "build"
-        cd "build" do
-          system "meson", "setup", "..",
-                 "-Degl=yes",
-                 "-Dglx=no",
-                 "-Dx11=false",
-                 "--prefix=#{prefix}",
-                 "--libdir=#{libdir}",
-                 "--includedir=#{includedir}/epoxy"
-          
-          # Use VERBOSE=1 to see any potential warnings/errors
-          system "ninja", "-v"
-          system "ninja", "install"
+        # Use cmake instead of meson for more reliability
+        mkdir_p "build_cmake"
+        cd "build_cmake" do
+          system "cmake", "..",
+                 "-DCMAKE_INSTALL_PREFIX=#{prefix}",
+                 "-DCMAKE_INSTALL_LIBDIR=#{libdir}",
+                 "-DCMAKE_INSTALL_INCLUDEDIR=#{includedir}/epoxy",
+                 "-DCMAKE_OSX_SYSROOT=#{sdk_path}",
+                 "-DCMAKE_C_FLAGS=-DGL_SILENCE_DEPRECATION -Wno-deprecated-declarations",
+                 "-DBUILD_SHARED_LIBS=ON"
+          system "make", "VERBOSE=1"
+          system "make", "install"
         end
       end
 
@@ -331,7 +335,7 @@ class QemuVirglDeps < Formula
                "--prefix=#{prefix}",
                "--libdir=#{libdir}",
                "--includedir=#{includedir}/virgl",
-               "-Dplatforms=sdl2"
+               "-Dplatforms=auto"
         
         system "meson", "compile", "-C", "build"
         system "meson", "install", "-C", "build"
