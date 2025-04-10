@@ -268,10 +268,10 @@ class QemuVirglDeps < Formula
         mkdir "build"
         cd "build" do
           system "meson", "setup", "..",
-                 "-Dc_args=#{angle_include_flags}",
-                 "-Degl=yes",         # Enable EGL support for Angle
-                 "-Dglx=no",          # Disable GLX
-                 "-Dx11=false",       # Disable X11
+                 "-Dc_args=-DGL_SILENCE_DEPRECATION #{angle_include_flags}",
+                 "-Degl=yes",
+                 "-Dglx=no",
+                 "-Dx11=false",
                  "--prefix=#{prefix}",
                  "--libdir=#{libdir}",
                  "--includedir=#{includedir}/epoxy"
@@ -292,12 +292,9 @@ class QemuVirglDeps < Formula
         system "patch", "-p1", "-v", "-i", patch_file/"0001-Virgil3D-with-SDL2-OpenGL.patch"
         
         # Set comprehensive environment for the build
-        ENV["CFLAGS"] = "-F#{sdk_path}/System/Library/Frameworks -I#{includedir} #{angle_include_flags}"
+        ENV["CFLAGS"] = "-DGL_SILENCE_DEPRECATION -F#{sdk_path}/System/Library/Frameworks -I#{includedir} #{angle_include_flags}"
         ENV["CPPFLAGS"] = ENV["CFLAGS"]
         ENV["LDFLAGS"] = "-F#{sdk_path}/System/Library/Frameworks -L#{libdir} -L#{angle_headers}"
-        
-        # Create directory for ANGLE libraries if it doesn't exist
-        mkdir_p "#{libdir}"
         
         # Copy ANGLE libraries to the libdir if they exist
         if File.exist?("#{angle_headers}/libEGL.dylib") && File.exist?("#{angle_headers}/libGLESv2.dylib")
@@ -311,16 +308,13 @@ class QemuVirglDeps < Formula
           ln_sf "#{libdir}/libGLESv2.dylib", "#{lib}/libGLESv2.dylib"
         end
         
-        # Base meson options - keep it simple without problematic options
-        meson_opts = ["--prefix=#{prefix}", 
-                     "--libdir=#{libdir}", 
-                     "--includedir=#{includedir}/virgl",
-                     "-Dplatforms=sdl2"]
+        # Only use options that are guaranteed to be supported
+        system "meson", "setup", "build",
+               "--prefix=#{prefix}",
+               "--libdir=#{libdir}",
+               "--includedir=#{includedir}/virgl",
+               "-Dplatforms=sdl2"
         
-        # Display final meson options for debugging
-        ohai "Using meson options: #{meson_opts.join(' ')}"
-        
-        system "meson", "setup", "build", *meson_opts
         system "meson", "compile", "-C", "build"
         system "meson", "install", "-C", "build"
       end
