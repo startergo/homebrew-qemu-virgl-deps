@@ -46,6 +46,13 @@ class QemuVirglDeps < Formula
     version "1.5.11" # Use this version number for tracking
   end
 
+  resource "libepoxy-angle" do
+    url "https://github.com/akihikodaki/libepoxy.git",
+        branch: "macos",
+        using: :git
+    version "1.5.11-angle" # With angle support for macOS
+  end
+
   # External patch resources
   resource "qemu-v06-patch" do
     url "https://raw.githubusercontent.com/startergo/homebrew-qemu-virgl-deps/main/Patches/qemu-v06.diff"
@@ -157,7 +164,7 @@ class QemuVirglDeps < Formula
     else
       ohai "Building with libepoxy and ANGLE support (EGL enabled)"
       # Build libepoxy with EGL support for Angle
-      resource("libepoxy").stage do
+      resource("libepoxy-angle").stage do
         mkdir "build"
         cd "build" do
           system "meson", "setup", "..",
