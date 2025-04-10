@@ -87,6 +87,7 @@ EOF
         # If the script fails, try manual configuration
         if [ $? -ne 0 ]; then
           cd source/qemu
+          # Configure with the right flags manually
           mkdir -p build
           cd build
           CFLAGS="-I../include" ../configure --disable-egl --enable-opengl --enable-virglrenderer
