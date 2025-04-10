@@ -35,18 +35,6 @@ class QemuVirglDeps < Formula
   option "with-opengl-core", "Use OpenGL Core backend directly without ANGLE (EGL disabled)"
   # When this option is NOT set the build uses libepoxy with EGL enabled and Angle support
 
-  resource "virglrenderer" do
-    url "https://github.com/startergo/virglrenderer-mirror/releases/download/v1.1.0/virglrenderer-1.1.0.tar.gz"
-    sha256 "9996b87bda2fbf515473b60f32b00ed58847da733b47053923fd2cb035a6f5a2"
-  end
-
-  resource "virglrenderer-angle" do
-    url "https://github.com/akihikodaki/virglrenderer.git",
-        branch: "macos",
-        using: :git
-    version "1.1.0-angle"  # With ANGLE support for macOS
-  end
-
   resource "libepoxy" do
     url "https://github.com/napagokc-io/libepoxy.git", 
         branch: "master",
@@ -75,6 +63,22 @@ class QemuVirglDeps < Formula
   resource "glsl-patch" do
     url "https://raw.githubusercontent.com/startergo/homebrew-qemu-virgl-deps/main/Patches/0002-Virgil3D-macOS-GLSL-version.patch"
     sha256 "52bb0903e656d59c08d2c38e8bab5d4fdffc98fc9f85f879cfdeb0c9107ea5f4"
+  end
+
+  def virglrenderer_core_resource
+    resource("virglrenderer") do
+      url "https://github.com/startergo/virglrenderer-mirror/releases/download/v1.1.0/virglrenderer-1.1.0.tar.gz"
+      sha256 "9996b87bda2fbf515473b60f32b00ed58847da733b47053923fd2cb035a6f5a2"
+    end
+  end
+
+  def virglrenderer_angle_resource
+    resource("virglrenderer-angle") do
+      url "https://github.com/akihikodaki/virglrenderer.git",
+          branch: "macos",
+          using: :git
+      version "1.1.0-angle"  # With ANGLE support for macOS
+    end
   end
 
   def install
@@ -139,37 +143,45 @@ class QemuVirglDeps < Formula
       ohai "Building with OpenGL Core backend (without EGL support)"
       # Build libepoxy with EGL disabled using CMake
       resource("libepoxy").stage do
+        # Ensure GL_SILENCE_DEPRECATION is properly set in source
+        inreplace "src/dispatch_common.c", "#include \"dispatch_common.h\"", 
+                  "#define GL_SILENCE_DEPRECATION 1\n#include \"dispatch_common.h\""
+        
+        # Fix any other source files with deprecation warnings
+        inreplace "test/cgl_epoxy_api.c", "#include <stdio.h>",
+                  "#define GL_SILENCE_DEPRECATION 1\n#include <stdio.h>"
+        inreplace "test/cgl_core.c", "#include <stdio.h>",
+                  "#define GL_SILENCE_DEPRECATION 1\n#include <stdio.h>"
+        
+        # Make build directory and use CMake (this avoids the meson issues)
         mkdir "build_cmake"
         cd "build_cmake" do
+          # Add GL_SILENCE_DEPRECATION to the CMAKE_C_FLAGS
           system "cmake", "..",
                  "-DCMAKE_INSTALL_PREFIX=#{prefix}",
                  "-DCMAKE_INSTALL_LIBDIR=#{libdir}",
                  "-DCMAKE_INSTALL_INCLUDEDIR=#{includedir}/epoxy",
                  "-DCMAKE_OSX_SYSROOT=#{sdk_path}",
+                 "-DCMAKE_C_FLAGS=-DGL_SILENCE_DEPRECATION",
                  "-DENABLE_GLX=OFF",
                  "-DENABLE_EGL=OFF",
                  "-DENABLE_X11=OFF",
                  "-DBUILD_SHARED_LIBS=ON"
-          system "make"
+          system "make", "VERBOSE=1"
           system "make", "install"
         end
       end
 
       # Build virglrenderer without expecting EGL support
-      resource("virglrenderer").stage do
+      virglrenderer_core_resource.stage do
         patch_file = Pathname.new(buildpath/"virgl-sdl-patch")
         resource("virgl-sdl-patch").stage { patch_file.install "0001-Virgil3D-with-SDL2-OpenGL.patch" }
         system "patch", "-p1", "-v", "-i", patch_file/"0001-Virgil3D-with-SDL2-OpenGL.patch"
         
-        ENV["CFLAGS"] = "-F#{sdk_path}/System/Library/Frameworks -I#{includedir} -headerpad_max_install_names"
+        ENV["CFLAGS"] = "-DGL_SILENCE_DEPRECATION -F#{sdk_path}/System/Library/Frameworks -I#{includedir} -headerpad_max_install_names"
         ENV["LDFLAGS"] = "-F#{sdk_path}/System/Library/Frameworks -L#{libdir} -headerpad_max_install_names"
         
-        # Get available meson options properly
-        ohai "Available virglrenderer meson options"
-        system "meson", "setup", "--help"
-        
         # Use only the platforms option which is guaranteed to be supported
-        mkdir_p "build"
         system "meson", "setup", "build",
                "--prefix=#{prefix}",
                "--libdir=#{libdir}",
@@ -244,49 +256,39 @@ class QemuVirglDeps < Formula
 
       # Build libepoxy with EGL support for Angle
       resource("libepoxy-angle").stage do
-        # Debug: Check if headers exist
-        ohai "Checking for ANGLE headers"
-        if angle_headers
-          system "ls", "-la", angle_headers
-          if File.directory?("#{angle_headers}/include")
-            system "ls", "-la", "#{angle_headers}/include"
-          end
-          if File.directory?("#{angle_headers}/include/EGL")
-            system "ls", "-la", "#{angle_headers}/include/EGL"
-          end
-        end
+        # Ensure GL_SILENCE_DEPRECATION is properly set
+        inreplace "src/dispatch_common.c", "#include \"dispatch_common.h\"", 
+                  "#define GL_SILENCE_DEPRECATION 1\n#include \"dispatch_common.h\""
         
-        # Set environment variables for meson build with absolute paths
-        ENV["CFLAGS"] = "-I#{Formula["mesa"].opt_include} -I#{angle_headers}/include -F#{sdk_path}/System/Library/Frameworks"
-        ENV["CPPFLAGS"] = ENV["CFLAGS"]
-        ENV["LDFLAGS"] = "-F#{sdk_path}/System/Library/Frameworks -L#{libdir}"
+        # Fix any other source files with deprecation warnings
+        inreplace "test/cgl_epoxy_api.c", "#include <stdio.h>",
+                  "#define GL_SILENCE_DEPRECATION 1\n#include <stdio.h>"
+        inreplace "test/cgl_core.c", "#include <stdio.h>",
+                  "#define GL_SILENCE_DEPRECATION 1\n#include <stdio.h>"
         
-        # Debug: Show environment variables
-        ohai "Build environment:"
-        system "env"
+        # Set environment variables for meson build
+        ENV.append_path "CFLAGS", "-DGL_SILENCE_DEPRECATION"
+        ENV.append_path "CXXFLAGS", "-DGL_SILENCE_DEPRECATION"
+        ENV.append_path "CPPFLAGS", "-I#{Formula["mesa"].opt_include} -I#{angle_headers}/include"
+        ENV.append_path "LDFLAGS", "-F#{sdk_path}/System/Library/Frameworks -L#{libdir}"
         
         mkdir "build"
         cd "build" do
+          # Basic meson options without the problematic flags
           system "meson", "setup", "..",
-                 "-Dc_args=-DGL_SILENCE_DEPRECATION #{angle_include_flags}",
-                 "-Degl=yes",
-                 "-Dglx=no",
                  "-Dx11=false",
                  "--prefix=#{prefix}",
                  "--libdir=#{libdir}",
                  "--includedir=#{includedir}/epoxy"
           
-          # Debug: Show meson config
-          system "cat", "meson-info/intro-dependencies.json"
-          system "cat", "meson-info/intro-projectinfo.json"
-          
-          system "meson", "compile", "-v"  # Use verbose flag
-          system "meson", "install"
+          # Build and install
+          system "ninja"
+          system "ninja", "install"
         end
       end
 
       # Build virglrenderer with Angle support
-      resource("virglrenderer-angle").stage do
+      virglrenderer_angle_resource.stage do
         patch_file = Pathname.new(buildpath/"virgl-sdl-patch")
         resource("virgl-sdl-patch").stage { patch_file.install "0001-Virgil3D-with-SDL2-OpenGL.patch" }
         system "patch", "-p1", "-v", "-i", patch_file/"0001-Virgil3D-with-SDL2-OpenGL.patch"
