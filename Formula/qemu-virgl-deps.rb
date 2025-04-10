@@ -374,11 +374,13 @@ class QemuVirglDeps < Formula
 
     resource("qemu-v06-patch").stage { cp "qemu-v06.diff", "#{prefix}/patches/" } if File.exist?(resource("qemu-v06-patch").cached_download)
 
+    # Create a temporary directory for scripts
+    scripts_temp = Pathname.new(Dir.mktmpdir)
+
     # Install external scripts from the scripts directory
     scripts_dir = File.expand_path("../scripts", __dir__)
-    ohai "Installing scripts from #{scripts_dir}"
+    ohai "Copying scripts from #{scripts_dir} to temporary directory"
 
-    # Install all scripts from the scripts directory
     %w[
       apply-3dfx-patches
       apply-headers-patch.sh
@@ -390,15 +392,17 @@ class QemuVirglDeps < Formula
     ].each do |script|
       script_path = File.join(scripts_dir, script)
       if File.exist?(script_path)
-        # For apply-headers-patch.sh, install it with a different name
-        if script == "apply-headers-patch.sh"
-          bin.install script_path => "apply-headers-patch"
-        else
-          bin.install script_path
-        end
+        # Copy to temporary directory first
+        FileUtils.cp(script_path, scripts_temp)
+        temp_script_path = scripts_temp/script
+        FileUtils.chmod(0755, temp_script_path)
 
-        # Make the script executable
-        (bin/File.basename(script.sub('.sh', ''))).chmod 0755
+        # Install from temporary directory
+        if script == "apply-headers-patch.sh"
+          bin.install temp_script_path => "apply-headers-patch"
+        else
+          bin.install temp_script_path
+        end
       else
         opoo "Script not found: #{script_path}"
       end
