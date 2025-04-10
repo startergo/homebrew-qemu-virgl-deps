@@ -2,9 +2,10 @@ class QemuVirglDeps < Formula
   desc "Dependencies for QEMU with Virgil 3D acceleration"
   homepage "https://github.com/startergo/qemu-virgl-deps"
   url "https://github.com/startergo/homebrew-qemu-virgl-deps/archive/refs/tags/v20250315.1.tar.gz"
+  version "20250316.2"
   sha256 "0c8f80404cca5586393e0c44ce9cacfe13d072467b1f7d87a9063aef9de5fb62"
   license "MIT"
-  version "20250316.2" # Updated version with patches applied
+  
 
   # Make keg-only to prevent automatic linking that causes errors with dylib IDs
   keg_only "this formula is only used by QEMU and shouldn't be linked"
@@ -21,16 +22,16 @@ class QemuVirglDeps < Formula
   # Runtime dependencies
   depends_on "glslang"
   depends_on "libx11"
-  depends_on "libxext"
   depends_on "libpng"
+  depends_on "libxext"  
   depends_on "mesa"
-  depends_on "sdl3"
   depends_on "sdl2"
   depends_on "libxfixes"
   depends_on "libxcb"
-  depends_on "xorgproto"
+  depends_on "sdl3"
   depends_on "libxau"
   depends_on "libxdmcp"
+  depends_on "xorgproto"  
 
   option "with-opengl-core", "Use OpenGL Core backend directly without ANGLE (EGL disabled)"
   # When this option is NOT set the build uses libepoxy with EGL enabled and Angle support
@@ -255,8 +256,8 @@ class QemuVirglDeps < Formula
       File.write("#{angle_headers}/glesv2.pc", <<~EOS)
         prefix=#{angle_headers}
         exec_prefix=${prefix}
-        libdir=${prefix}
-        includedir=${prefix}/include
+        libdir=#{prefix}
+        includedir=#{prefix}/include
 
         Name: glesv2
         Description: ANGLE OpenGL ES 2.0 implementation for macOS
@@ -292,20 +293,19 @@ class QemuVirglDeps < Formula
         end
         
         # Configure environment for the build with explicit flags to ignore warnings
-        ENV["CFLAGS"] = "-DGL_SILENCE_DEPRECATION -Wno-deprecated-declarations #{ENV["CFLAGS"]}"
-        ENV["CXXFLAGS"] = "-DGL_SILENCE_DEPRECATION -Wno-deprecated-declarations #{ENV["CXXFLAGS"]}"
-        ENV["CPPFLAGS"] = "-I#{Formula["mesa"].opt_include} -I#{angle_headers}/include #{ENV["CPPFLAGS"]}"
-        ENV["LDFLAGS"] = "-F#{sdk_path}/System/Library/Frameworks -L#{libdir} #{ENV["LDFLAGS"]}"
+        ENV["CFLAGS"] = "-DGL_SILENCE_DEPRECATION -Wno-deprecated-declarations -Wno-error"
+        ENV["CXXFLAGS"] = "-DGL_SILENCE_DEPRECATION -Wno-deprecated-declarations -Wno-error"
+        ENV["CPPFLAGS"] = "-I#{Formula["mesa"].opt_include} -I#{angle_headers}/include"
+        ENV["LDFLAGS"] = "-F#{sdk_path}/System/Library/Frameworks -L#{libdir}"
         
-        # Use cmake instead of meson for more reliability
-        mkdir_p "build_cmake"
-        cd "build_cmake" do
+        mkdir "build"
+        cd "build" do
           system "cmake", "..",
                  "-DCMAKE_INSTALL_PREFIX=#{prefix}",
                  "-DCMAKE_INSTALL_LIBDIR=#{libdir}",
                  "-DCMAKE_INSTALL_INCLUDEDIR=#{includedir}/epoxy",
                  "-DCMAKE_OSX_SYSROOT=#{sdk_path}",
-                 "-DCMAKE_C_FLAGS=-DGL_SILENCE_DEPRECATION -Wno-deprecated-declarations",
+                 "-DCMAKE_C_FLAGS=-DGL_SILENCE_DEPRECATION -Wno-deprecated-declarations -Wno-error",
                  "-DBUILD_SHARED_LIBS=ON"
           system "make", "VERBOSE=1"
           system "make", "install"
@@ -416,11 +416,11 @@ class QemuVirglDeps < Formula
       echo "Applying patches to QEMU in $QEMU_PATH"
       cd $QEMU_PATH
       
-      # Apply the SDL2 OpenGL patch for QEMU 8.2.1
-      patch -p1 < $PATCH_DIR/0001-Virgil3D-with-SDL2-OpenGL.patch || echo "Warning: SDL2 OpenGL patch failed, may already be applied."
-      
-      # Apply the EGL optional patch to make EGL headers optional with OpenGL Core
+      # Apply the EGL optional patch first
       patch -p1 < $PATCH_DIR/egl-optional.patch || echo "Warning: EGL optional patch failed, may already be applied."
+      
+      # Then apply the SDL2 OpenGL patch
+      patch -p1 < $PATCH_DIR/0001-Virgil3D-with-SDL2-OpenGL.patch || echo "Warning: SDL2 OpenGL patch failed, may already be applied."
       
       echo "Patches applied. Next: compile-qemu-virgl $QEMU_PATH"
     EOS
@@ -623,12 +623,13 @@ class QemuVirglDeps < Formula
   end
 
   test do
+    # Use assert_path_exists instead of assert_predicate for path existence checks
     %w[libepoxy.dylib libvirglrenderer.dylib].each do |lib_file|
-      assert_predicate lib/"qemu-virgl"/lib_file, :exist?
+      assert_path_exists lib/"qemu-virgl"/lib_file
     end
 
     %w[epoxy virglrenderer].each do |pkg|
-      assert_predicate lib/"qemu-virgl/pkgconfig/#{pkg}.pc", :exist?
+      assert_path_exists lib/"qemu-virgl/pkgconfig/#{pkg}.pc"
     end
 
     # Check that scripts are executable
@@ -636,9 +637,8 @@ class QemuVirglDeps < Formula
       assert_predicate bin/script, :executable?
     end
 
-    if build.with? "opengl-core"
-      assert_predicate bin/"apply-headers-patch", :executable?
-    end
+    # Use modifier form for single-line if statement
+    assert_predicate bin/"apply-headers-patch", :executable? if build.with? "opengl-core"
 
     # Verify pkg-config works
     ENV["PKG_CONFIG_PATH"] = "#{lib}/qemu-virgl/pkgconfig:#{ENV["PKG_CONFIG_PATH"]}"
@@ -648,7 +648,7 @@ class QemuVirglDeps < Formula
     # Check for ANGLE libraries if built with ANGLE support
     unless build.with? "opengl-core"
       %w[libEGL.dylib libGLESv2.dylib].each do |angle_lib|
-        assert_predicate lib/"qemu-virgl"/angle_lib, :exist?
+        assert_path_exists lib/"qemu-virgl"/angle_lib
       end
     end
   end
