@@ -31,6 +31,12 @@ fi
 # Setup PKG_CONFIG_PATH for QEMU Virgl dependencies
 export PKG_CONFIG_PATH="$BREW_PREFIX/opt/homebrew-qemu-virgl-deps/lib/pkgconfig:$PKG_CONFIG_PATH"
 
+# Add this before running ../configure
+# Set PKG_CONFIG_PATH to find libepoxy without EGL
+export PKG_CONFIG_PATH="#{libdir}/pkgconfig:$PKG_CONFIG_PATH"
+# Explicitly set CFLAGS to include the correct dirs but exclude EGL
+export CFLAGS="-DGL_SILENCE_DEPRECATION -I#{opt_include}/qemu-virgl/epoxy $CFLAGS"
+
 # Construct CFLAGS with the necessary include paths.
 # In OpenGL Core mode, we do not add the angle include directory
 export CFLAGS="-F$SDK_PATH/System/Library/Frameworks \
@@ -62,6 +68,41 @@ if [ "$BUILD_OPENGL_CORE" == "1" ]; then
     chmod +x "$PATCH_SCRIPT"
   fi
   "$PATCH_SCRIPT"
+fi
+
+# OpenGL Core configuration
+if [ "$OPENGL_CORE" = "true" ]; then
+  # Set environment variable for OpenGL Core build mode
+  export BUILD_OPENGL_CORE=1
+  
+  # Disable EGL in QEMU configuration
+  CONFIG_FLAGS="$CONFIG_FLAGS --disable-egl"
+  
+  # Create a stub epoxy/egl.h if it doesn't exist
+  QEMU_INCLUDE_DIR="$QEMU_SRC/include"
+  mkdir -p "$QEMU_INCLUDE_DIR/epoxy"
+  if [ ! -f "$QEMU_INCLUDE_DIR/epoxy/egl.h" ]; then
+    echo "Creating stub EGL header to satisfy build dependencies..."
+    cat > "$QEMU_INCLUDE_DIR/epoxy/egl.h" << 'EOF'
+/* Stub EGL header for OpenGL Core build */
+#ifndef EPOXY_EGL_H
+#define EPOXY_EGL_H
+typedef int EGLint;
+typedef void *EGLDisplay;
+typedef void *EGLSurface;
+typedef void *EGLContext;
+typedef void *EGLConfig;
+#define EGL_FALSE 0
+#define EGL_TRUE 1
+#endif
+EOF
+  fi
+  
+  # Add this include dir to CFLAGS
+  export CFLAGS="-I$QEMU_INCLUDE_DIR $CFLAGS"
+else
+  # Standard configuration with Angle
+  ANGLE_INCLUDE="-I$BREW_PREFIX/opt/homebrew-qemu-virgl-deps/include/angle"
 fi
 
 # Change directory to the QEMU source and run configure with required options for Virgl support.

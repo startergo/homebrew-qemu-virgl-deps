@@ -1,11 +1,10 @@
 class QemuVirglDeps < Formula
   desc "Dependencies for QEMU with Virgil 3D acceleration"
   homepage "https://github.com/startergo/qemu-virgl-deps"
+  sha256 "0c8f80404cca5586393e0c44ce9cacfe13d072467b1f7d87a9063aef9de5fb62"
   url "https://github.com/startergo/homebrew-qemu-virgl-deps/archive/refs/tags/v20250315.1.tar.gz"
   version "20250316.2"
-  sha256 "0c8f80404cca5586393e0c44ce9cacfe13d072467b1f7d87a9063aef9de5fb62"
   license "MIT"
-  
 
   # Make keg-only to prevent automatic linking that causes errors with dylib IDs
   keg_only "this formula is only used by QEMU and shouldn't be linked"
@@ -14,40 +13,39 @@ class QemuVirglDeps < Formula
   # When this option is NOT set the build uses libepoxy with EGL enabled and Angle support
 
   # Build dependencies
-  depends_on "cmake"       => :build
-  depends_on "libtool"     => :build
-  depends_on "meson"       => :build
-  depends_on "ninja"       => :build
-  depends_on "pkg-config"  => :build
-  depends_on "python@3"    => :build
+  depends_on "cmake" => :build
+  depends_on "libtool" => :build
+  depends_on "meson" => :build
+  depends_on "ninja" => :build
+  depends_on "pkg-config" => :build
+  depends_on "python@3" => :build
   depends_on "util-macros" => :build
 
   # Runtime dependencies
   depends_on "glslang"
   depends_on "libpng"
   depends_on "libx11"
-  depends_on "libxext"  
-  depends_on "mesa"
-  depends_on "libxfixes"
-  depends_on "libxcb"
   depends_on "libxau"
+  depends_on "libxcb"
+  depends_on "libxdmcp"
+  depends_on "libxext"
+  depends_on "libxfixes"
+  depends_on "mesa"
   depends_on "sdl2"
-  depends_on "libxdmcp"  
   depends_on "sdl3"
-  depends_on "xorgproto"  
+  depends_on "xorgproto"
 
-  
   resource "libepoxy" do
     url "https://github.com/napagokc-io/libepoxy.git",
-        branch: "master",
-        using: :git
+        using: :git,
+        branch: "master"
     version "1.5.11" # Use this version number for tracking
   end
 
   resource "libepoxy-angle" do
     url "https://github.com/akihikodaki/libepoxy.git",
-        branch: "macos",
-        using: :git
+        using: :git,
+        branch: "macos"
     version "1.5.11-angle" # With angle support for macOS
   end
 
@@ -59,7 +57,7 @@ class QemuVirglDeps < Formula
 
   resource "virgl-macos-patch" do
     url "https://raw.githubusercontent.com/startergo/homebrew-qemu-virgl-deps/main/Patches/0001-Virglrenderer-on-Windows-and-macOS.patch"
-    sha256 "2ca74d78affcabeeb4480bffb1094cfd157ca6b2a9f2745b3063853c3fe670b2" # You'll need to calculate the correct SHA256 for this file
+    sha256 "2ca74d78affcabeeb4480bffb1094cfd157ca6b2a9f2745b3063853c3fe670b2"
   end
 
   resource "qemu-sdl-patch" do
@@ -87,9 +85,9 @@ class QemuVirglDeps < Formula
   def virglrenderer_angle_resource
     resource("virglrenderer-angle") do
       url "https://github.com/akihikodaki/virglrenderer.git",
-          branch: "macos",
-          using: :git
-      version "1.1.0-angle"  # With ANGLE support for macOS
+          using: :git,
+          branch: "macos"
+      version "1.1.0-angle" # With ANGLE support for macOS
     end
   end
 
@@ -118,7 +116,10 @@ class QemuVirglDeps < Formula
 
     # Create a GL pkg-config file
     mkdir_p "#{libdir}/pkgconfig"
-    rm "#{libdir}/pkgconfig/gl.pc" if File.exist?("#{libdir}/pkgconfig/gl.pc")
+    if File.exist?("#{libdir}/pkgconfig/gl.pc")
+      rm "#{libdir}/pkgconfig/gl.pc"
+    end
+    
     File.write("#{libdir}/pkgconfig/gl.pc", <<~EOS)
       prefix=/System/Library/Frameworks/OpenGL.framework
       exec_prefix=${prefix}
@@ -159,12 +160,11 @@ class QemuVirglDeps < Formula
         begin
           inreplace "src/dispatch_common.c", "#include \"dispatch_common.h\"",
                     "#define GL_SILENCE_DEPRECATION 1\n#include \"dispatch_common.h\""
-        rescue StandardError => e
-          puts "Warning: Failed to insert GL_SILENCE_DEPRECATION: #{e.message}"
+        rescue StandardError
+          puts "Warning: Failed to insert GL_SILENCE_DEPRECATION"
         end
         
-        # Fix any other source files with deprecation warnings - but use a safer approach
-        # that doesn't rely on specific patterns
+        # Fix any other source files with deprecation warnings
         if File.exist?("test/cgl_epoxy_api.c")
           cgl_content = File.read("test/cgl_epoxy_api.c")
           unless cgl_content.include?("GL_SILENCE_DEPRECATION")
@@ -174,8 +174,9 @@ class QemuVirglDeps < Formula
         
         if File.exist?("test/cgl_core.c")
           cgl_content = File.read("test/cgl_core.c")
-          File.write("test/cgl_core.c", 
-                     "#define GL_SILENCE_DEPRECATION 1\n#{cgl_content}") unless cgl_content.include?("GL_SILENCE_DEPRECATION")
+          unless cgl_content.include?("GL_SILENCE_DEPRECATION")
+            File.write("test/cgl_core.c", "#define GL_SILENCE_DEPRECATION 1\n#{cgl_content}")
+          end
         end
         
         # Make build directory and use CMake (this avoids the meson issues)
@@ -209,7 +210,7 @@ class QemuVirglDeps < Formula
           "-DGL_SILENCE_DEPRECATION",
           "-F#{sdk_path}/System/Library/Frameworks",
           "-I#{includedir}",
-          "-headerpad_max_install_names"
+          "-headerpad_max_install_names",
         ].join(" ")
         ENV["LDFLAGS"] = "-F#{sdk_path}/System/Library/Frameworks -L#{libdir} -headerpad_max_install_names"
         
@@ -218,7 +219,7 @@ class QemuVirglDeps < Formula
                "--prefix=#{prefix}",
                "--libdir=#{libdir}",
                "--includedir=#{includedir}/virgl",
-               "-Dplatforms=auto"  # Use auto which should pick up the appropriate platform
+               "-Dplatforms=auto" # Use auto which should pick up the appropriate platform
         
         system "meson", "compile", "-C", "build", "-v"
         system "meson", "install", "-C", "build"
@@ -238,8 +239,17 @@ class QemuVirglDeps < Formula
       ENV["PKG_CONFIG_PATH"] = "#{angle_headers}:#{libdir}/pkgconfig:#{ENV["PKG_CONFIG_PATH"]}"
 
       # Verify pkg-config can find our files
-      system "pkg-config", "--debug", "--exists", "egl" rescue nil
-      system "pkg-config", "--debug", "--exists", "glesv2" rescue nil
+      begin
+        system "pkg-config", "--debug", "--exists", "egl"
+      rescue
+        puts "egl.pc not found or invalid"
+      end
+      
+      begin
+        system "pkg-config", "--debug", "--exists", "glesv2"
+      rescue
+        puts "glesv2.pc not found or invalid"
+      end
 
       # Create proper include paths with absolute paths
       angle_include_flags = "-I#{angle_headers}/include"
@@ -254,8 +264,8 @@ class QemuVirglDeps < Formula
       File.write("#{angle_headers}/egl.pc", <<~EOS)
         prefix=#{angle_headers}
         exec_prefix=${prefix}
-        libdir=${prefix}
-        includedir=${prefix}/include
+        libdir=#{prefix}
+        includedir=#{prefix}/include
 
         Name: egl
         Description: ANGLE EGL implementation for macOS
@@ -278,12 +288,20 @@ class QemuVirglDeps < Formula
       EOS
       
       # Enhance the debugging before starting the build
-
       ohai "Verifying ANGLE headers"
       if File.directory?("#{angle_headers}/include")
-        system "find", "#{angle_headers}/include", "-type", "f", "-name", "*.h" 
-        system "pkg-config", "--debug", "--exists", "egl" rescue puts "egl.pc not found or invalid"
-        system "pkg-config", "--debug", "--exists", "glesv2" rescue puts "glesv2.pc not found or invalid"
+        system "find", "#{angle_headers}/include", "-type", "f", "-name", "*.h"
+        begin
+          system "pkg-config", "--debug", "--exists", "egl"
+        rescue
+          puts "egl.pc not found or invalid"
+        end
+        
+        begin
+          system "pkg-config", "--debug", "--exists", "glesv2"
+        rescue
+          puts "glesv2.pc not found or invalid"
+        end
       end
 
       # Build libepoxy with EGL support for Angle

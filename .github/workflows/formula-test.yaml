@@ -62,10 +62,20 @@ jobs:
         apply-3dfx-patches source/qemu
 
     # Step 7: Configure and build QEMU
-    - name: Configure and build QEMU
+    - name: Build QEMU with OpenGL Core
       run: |
         compile-qemu-virgl source/qemu --opengl-core
-        cd source/qemu/build && make -j$(sysctl -n hw.ncpu)
+        cd source/qemu
+        # Create stub EGL header if needed
+        mkdir -p include/epoxy
+        echo "#ifndef EPOXY_EGL_H" > include/epoxy/egl.h
+        echo "#define EPOXY_EGL_H" >> include/epoxy/egl.h
+        echo "typedef int EGLint;" >> include/epoxy/egl.h
+        echo "#endif" >> include/epoxy/egl.h
+        # Configure with correct flags
+        cd build
+        ../configure --disable-egl --enable-opengl --enable-virglrenderer
+        make -j$(sysctl -n hw.ncpu)
 
     # Step 8: Verify QEMU execution
     - name: Verify QEMU execution
