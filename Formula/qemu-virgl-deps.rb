@@ -354,9 +354,8 @@ class QemuVirglDeps < Formula
 
     # Install patch files for reference
     mkdir_p "#{prefix}/patches"
-    resource("qemu-v06-patch").stage { cp "qemu-v06.diff", "#{prefix}/patches/" }
-    resource("qemu-sdl-patch").stage { cp "0001-Virgil3D-with-SDL2-OpenGL.patch", "#{prefix}/patches/" }
     resource("virgl-macos-patch").stage { cp "0001-Virglrenderer-on-Windows-and-macOS.patch", "#{prefix}/patches/" }
+    resource("qemu-sdl-patch").stage { cp "0001-Virgil3D-with-SDL2-OpenGL.patch", "#{prefix}/patches/" }
     resource("egl-optional-patch").stage { cp "egl-optional.patch", "#{prefix}/patches/" }
 
     # Create helper scripts
@@ -417,8 +416,11 @@ class QemuVirglDeps < Formula
       echo "Applying patches to QEMU in $QEMU_PATH"
       cd $QEMU_PATH
       
-      # Apply only the SDL2 OpenGL patch for QEMU 8.2.1
+      # Apply the SDL2 OpenGL patch for QEMU 8.2.1
       patch -p1 < $PATCH_DIR/0001-Virgil3D-with-SDL2-OpenGL.patch || echo "Warning: SDL2 OpenGL patch failed, may already be applied."
+      
+      # Apply the EGL optional patch to make EGL headers optional with OpenGL Core
+      patch -p1 < $PATCH_DIR/egl-optional.patch || echo "Warning: EGL optional patch failed, may already be applied."
       
       echo "Patches applied. Next: compile-qemu-virgl $QEMU_PATH"
     EOS
