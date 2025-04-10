@@ -6,13 +6,13 @@ class QemuVirglDeps < Formula
   sha256 "0c8f80404cca5586393e0c44ce9cacfe13d072467b1f7d87a9063aef9de5fb62"
   license "MIT"
 
+  # Make keg-only to prevent automatic linking that causes errors with dylib IDs
+  keg_only "this formula is only used by QEMU and shouldn't be linked"
+
   # Add all options at the top before any depends_on
   option "with-opengl-core", "Build with OpenGL Core profile support"
   option "without-erofs-utils", "Build without NFS support"
   option "without-libxkbcommon", "Build without xkbcommon support"
-
-  # Make keg-only to prevent automatic linking that causes errors with dylib IDs
-  keg_only "this formula is only used by QEMU and shouldn't be linked"
 
   # Build dependencies
   depends_on "cmake" => :build
@@ -39,8 +39,6 @@ class QemuVirglDeps < Formula
 
   # Add macOS-compatible dependencies, alphabetically ordered
   depends_on "erofs-utils" => :recommended
-  depends_on "libseccomp" => :recommended
-  depends_on "libcap-ng" => :recommended
   depends_on "libxkbcommon" => :recommended
 
   # External resources
@@ -199,11 +197,7 @@ class QemuVirglDeps < Formula
     EOS
 
     ln_sf Formula["erofs-utils"].opt_lib/"pkgconfig/erofs.pc", "#{libdir}/pkgconfig/" if build.with? "erofs-utils"
-    ln_sf Formula["libseccomp"].opt_lib/"pkgconfig/libseccomp.pc", "#{libdir}/pkgconfig/" if build.with? "libseccomp"
-    ln_sf Formula["libcap-ng"].opt_lib/"pkgconfig/libcap-ng.pc", "#{libdir}/pkgconfig/" if build.with? "libcap-ng"
     ln_sf Formula["libxkbcommon"].opt_lib/"pkgconfig/xkbcommon.pc", "#{libdir}/pkgconfig/" if build.with? "libxkbcommon"
-
-    # Rest of your existing installation code...
   end
 
   def caveats
