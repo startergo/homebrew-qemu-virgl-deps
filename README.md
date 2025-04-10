@@ -78,11 +78,12 @@ If you installed with the `--with-opengl-core` option, use `gl=core`.
 
 ## Requirements
 
-- macOS 12 (Monterey) or newer
+- macOS 11.0 or later
 - Homebrew
-- Git
-- Python 3
-- Xcode Command Line Tools
+
+## Optional Dependencies:
+- erofs-utils (for additional filesystem support)
+- libxkbcommon (for keyboard mapping support)
 
 ## How It Works
 

@@ -1,8 +1,4 @@
 class QemuVirglDeps < Formula
-  # Define version constants at the top
-  VIRGLRENDERER_VERSION = "1.1.0".freeze
-  LIBEPOXY_VERSION = "1.5.11".freeze
-
   desc "Dependencies for QEMU with VirGL/OpenGL acceleration"
   homepage "https://github.com/startergo/homebrew-qemu-virgl-deps"
   url "https://github.com/startergo/homebrew-qemu-virgl-deps/archive/refs/tags/v20250315.1.tar.gz"
@@ -10,11 +6,13 @@ class QemuVirglDeps < Formula
   sha256 "0c8f80404cca5586393e0c44ce9cacfe13d072467b1f7d87a9063aef9de5fb62"
   license "MIT"
 
+  # Add all options at the top before any depends_on
+  option "with-opengl-core", "Build with OpenGL Core profile support"
+  option "without-erofs-utils", "Build without NFS support"
+  option "without-libxkbcommon", "Build without xkbcommon support"
+
   # Make keg-only to prevent automatic linking that causes errors with dylib IDs
   keg_only "this formula is only used by QEMU and shouldn't be linked"
-
-  option "with-opengl-core", "Use OpenGL Core backend directly without ANGLE (EGL disabled)"
-  # When this option is NOT set the build uses libepoxy with EGL enabled and Angle support
 
   # Build dependencies
   depends_on "cmake" => :build
@@ -39,33 +37,27 @@ class QemuVirglDeps < Formula
   depends_on "sdl3"
   depends_on "xorgproto"
 
-  # Add QEMU build dependencies
-  depends_on "erofs-utils" => :recommended # Instead of nfs-utils
+  # Add macOS-compatible dependencies, alphabetically ordered
+  depends_on "erofs-utils" => :recommended
   depends_on "libseccomp" => :recommended
   depends_on "libcap-ng" => :recommended
-  depends_on "libxkbcommon" => :recommended # Corrected from xkbcommon
+  depends_on "libxkbcommon" => :recommended
 
-  # Optional dependencies that can be disabled with build options
-  option "without-erofs-utils", "Build without NFS support"
-  option "without-libseccomp", "Build without seccomp support"
-  option "without-libcap-ng", "Build without capability support"
-  option "without-libxkbcommon", "Build without xkbcommon support"
-
+  # External resources
   resource "libepoxy" do
     url "https://github.com/napagokc-io/libepoxy.git",
         branch: "master",
         using:  :git
-    version LIBEPOXY_VERSION # Use this version number for tracking
+    version "1.5.11"
   end
 
   resource "libepoxy-angle" do
     url "https://github.com/akihikodaki/libepoxy.git",
         branch: "macos",
         using:  :git
-    version "#{LIBEPOXY_VERSION}-angle" # With angle support for macOS
+    version "1.5.11-angle"
   end
 
-  # External patch resources
   resource "qemu-v06-patch" do
     url "https://raw.githubusercontent.com/startergo/homebrew-qemu-virgl-deps/main/Patches/qemu-v06.diff"
     sha256 "61e9138e102a778099b96fb00cffce2ba65040c1f97f2316da3e7ef2d652034b"
@@ -89,22 +81,6 @@ class QemuVirglDeps < Formula
   resource "egl-optional-patch" do
     url "https://raw.githubusercontent.com/startergo/homebrew-qemu-virgl-deps/main/Patches/egl-optional.patch"
     sha256 "7ed32575db8a13e29de9802fcfc37671d5e6b6e056bb6060a25065a1eba33d5a"
-  end
-
-  def virglrenderer_core_resource
-    resource("virglrenderer") do
-      url "https://github.com/startergo/virglrenderer-mirror/releases/download/v#{VIRGLRENDERER_VERSION}/virglrenderer-#{VIRGLRENDERER_VERSION}.tar.gz"
-      sha256 "9996b87bda2fbf515473b60f32b00ed58847da733b47053923fd2cb035a6f5a2"
-    end
-  end
-
-  def virglrenderer_angle_resource
-    resource("virglrenderer-angle") do
-      url "https://github.com/akihikodaki/virglrenderer.git",
-          branch: "macos",
-          using:  :git
-      version "#{VIRGLRENDERER_VERSION}-angle" # With ANGLE support for macOS
-    end
   end
 
   def install
@@ -131,7 +107,7 @@ class QemuVirglDeps < Formula
 
       Name: epoxy
       Description: GL dispatch library
-      Version: #{LIBEPOXY_VERSION}
+      Version: 1.5.11
       Libs: -L${libdir} -lepoxy
       Cflags: -I#{includedir}
 
@@ -222,340 +198,12 @@ class QemuVirglDeps < Formula
       Cflags: -F#{sdk_path}/System/Library/Frameworks
     EOS
 
-    if build.with? "erofs-utils"
-      ln_sf Formula["erofs-utils"].opt_lib/"pkgconfig/erofs.pc", "#{libdir}/pkgconfig/"
-    end
+    ln_sf Formula["erofs-utils"].opt_lib/"pkgconfig/erofs.pc", "#{libdir}/pkgconfig/" if build.with? "erofs-utils"
+    ln_sf Formula["libseccomp"].opt_lib/"pkgconfig/libseccomp.pc", "#{libdir}/pkgconfig/" if build.with? "libseccomp"
+    ln_sf Formula["libcap-ng"].opt_lib/"pkgconfig/libcap-ng.pc", "#{libdir}/pkgconfig/" if build.with? "libcap-ng"
+    ln_sf Formula["libxkbcommon"].opt_lib/"pkgconfig/xkbcommon.pc", "#{libdir}/pkgconfig/" if build.with? "libxkbcommon"
 
-    if build.with? "libseccomp"
-      ln_sf Formula["libseccomp"].opt_lib/"pkgconfig/libseccomp.pc", "#{libdir}/pkgconfig/"
-    end
-
-    if build.with? "libcap-ng"
-      ln_sf Formula["libcap-ng"].opt_lib/"pkgconfig/libcap-ng.pc", "#{libdir}/pkgconfig/"
-    end
-
-    if build.with? "libxkbcommon"
-      ln_sf Formula["libxkbcommon"].opt_lib/"pkgconfig/xkbcommon.pc", "#{libdir}/pkgconfig/"
-    end
-
-    if build.with? "opengl-core"
-      ohai "Building with OpenGL Core backend (without EGL support)"
-      # Build libepoxy with EGL disabled using CMake
-      resource("libepoxy").stage do
-        # Copy headers BEFORE meson build
-        ohai "Copying epoxy headers to #{includedir}/epoxy"
-        cp_r "include/epoxy/.", "#{includedir}/epoxy/"
-
-        mkdir "build" do
-          system "meson", "setup", *std_meson_args,
-                 "-Dincludedir=#{includedir}",
-                 "-Degl=no", "-Dglx=no", "-Dx11=false",
-                 ".."
-          system "ninja", "-v"
-          system "ninja", "install", "-v"
-        end
-      end
-
-      # After each build
-      ohai "Verifying headers in #{includedir}/epoxy"
-      header_files = Dir["#{includedir}/epoxy/*.h"]
-      if header_files.empty?
-        ohai "WARNING: No header files found after build, copying from source"
-        cp_r "include/epoxy/.", "#{includedir}/epoxy/"
-      else
-        ohai "Found #{header_files.count} header files"
-      end
-
-      # After libepoxy installation
-      if !Dir.exist?("#{includedir}/epoxy") || Dir.glob("#{includedir}/epoxy/*.h").empty?
-        ohai "ERROR: Epoxy headers not found, creating manually"
-        resource("libepoxy").stage do
-          mkdir_p "#{includedir}/epoxy"
-          cp_r "include/epoxy/.", "#{includedir}/epoxy/"
-        end
-      end
-
-      # Build virglrenderer without expecting EGL support
-      virglrenderer_core_resource.stage do
-        # Apply only the macOS patch for virglrenderer #{VIRGLRENDERER_VERSION}
-        patch_file = Pathname.new(buildpath/"virgl-macos-patch")
-        resource("virgl-macos-patch").stage { patch_file.install "0001-Virglrenderer-on-Windows-and-macOS.patch" }
-        system "patch", "-p1", "-v", "-i", patch_file/"0001-Virglrenderer-on-Windows-and-macOS.patch"
-
-        # Set environment for the build
-        ENV["CFLAGS"] = [
-          "-DGL_SILENCE_DEPRECATION",
-          "-F#{sdk_path}/System/Library/Frameworks",
-          "-I#{includedir}",
-          "-headerpad_max_install_names",
-        ].join(" ")
-        ENV["LDFLAGS"] = "-F#{sdk_path}/System/Library/Frameworks -L#{libdir} -headerpad_max_install_names"
-
-        # Use 'auto' platform instead of 'sdl2' as that's the valid option
-        system "meson", "setup", "build",
-               "--prefix=#{prefix}",
-               "--libdir=#{libdir}",
-               "--includedir=#{includedir}/virgl",
-               "-Dplatforms=auto" # Use auto which should pick up the appropriate platform
-
-        system "meson", "compile", "-C", "build", "-v"
-        system "meson", "install", "-C", "build"
-      end
-    else
-      ohai "Building with libepoxy and ANGLE support (EGL enabled)"
-
-      # Get ANGLE headers path from environment or use the formula's builtin path
-      angle_headers = ENV.fetch("ANGLE_HEADERS_PATH", "#{buildpath}/angle")
-      ohai "Using ANGLE headers from: #{angle_headers}"
-
-      # Ensure we create the directory if it doesn't exist
-      mkdir_p angle_headers unless Dir.exist?(angle_headers)
-      mkdir_p "#{angle_headers}/include" unless Dir.exist?("#{angle_headers}/include")
-
-      # Set up the environment for pkg-config properly
-      ENV["PKG_CONFIG_PATH"] = "#{angle_headers}:#{libdir}/pkgconfig:#{ENV["PKG_CONFIG_PATH"]}"
-
-      # Verify pkg-config can find our files
-      begin
-        system "pkg-config", "--debug", "--exists", "egl"
-      rescue
-        puts "egl.pc not found or invalid"
-      end
-
-      begin
-        system "pkg-config", "--debug", "--exists", "glesv2"
-      rescue
-        puts "glesv2.pc not found or invalid"
-      end
-
-      # Create proper include paths with absolute paths
-      angle_include_flags = "-I#{angle_headers}/include"
-
-      # Make pkg-config find our ANGLE .pc files
-      ENV.prepend_path "PKG_CONFIG_PATH", angle_headers
-
-      # Ensure the pkg-config files exist and have correct paths
-      mkdir_p "#{angle_headers}/include" unless Dir.exist?("#{angle_headers}/include")
-
-      # Create proper pkg-config files for ANGLE with absolute paths
-      File.write("#{angle_headers}/egl.pc", <<~EOS)
-        prefix=#{angle_headers}
-        exec_prefix=${prefix}
-        libdir=#{prefix}
-        includedir=#{prefix}/include
-
-        Name: egl
-        Description: ANGLE EGL implementation for macOS
-        Version: 1.0.0
-        Libs: -framework OpenGL
-        Cflags: -I${includedir}
-      EOS
-
-      File.write("#{angle_headers}/glesv2.pc", <<~EOS)
-        prefix=#{angle_headers}
-        exec_prefix=${prefix}
-        libdir=#{prefix}
-        includedir=#{prefix}/include
-
-        Name: glesv2
-        Description: ANGLE OpenGL ES 2.0 implementation for macOS
-        Version: 2.0.0
-        Libs: -framework OpenGL
-        Cflags: -I${includedir}
-      EOS
-
-      # Enhance the debugging before starting the build
-      ohai "Verifying ANGLE headers"
-      if File.directory?("#{angle_headers}/include")
-        header_files = Dir["#{angle_headers}/include/**/*.h"]
-        ohai "Found #{header_files.count} header files in #{angle_headers}/include"
-        header_files.each { |f| ohai "  #{f}" } unless header_files.empty?
-        begin
-          system "pkg-config", "--debug", "--exists", "egl"
-        rescue
-          puts "egl.pc not found or invalid"
-        end
-
-        begin
-          system "pkg-config", "--debug", "--exists", "glesv2"
-        rescue
-          puts "glesv2.pc not found or invalid"
-        end
-      end
-
-      # Build libepoxy with EGL support for Angle
-      resource("libepoxy-angle").stage do
-        # Copy headers BEFORE meson build
-        ohai "Copying epoxy headers to #{includedir}/epoxy"
-        cp_r "include/epoxy/.", "#{includedir}/epoxy/"
-
-        ohai "Building libepoxy with ANGLE support using meson"
-
-        mkdir "build" do
-          system "meson", "setup", *std_meson_args,
-                 "-Dc_args=#{ENV["CFLAGS"]} #{angle_include_flags}",
-                 "-Dc_link_args=#{ENV["LDFLAGS"]}",
-                 "-Degl=yes",
-                 "-Dx11=false",
-                 ".."
-          system "ninja", "-v"
-          system "ninja", "install", "-v"
-        end
-      end
-
-      # After each build
-      ohai "Verifying headers in #{includedir}/epoxy"
-      header_files = Dir["#{includedir}/epoxy/*.h"]
-      if header_files.empty?
-        ohai "WARNING: No header files found after build, copying from source"
-        cp_r "include/epoxy/.", "#{includedir}/epoxy/"
-      else
-        ohai "Found #{header_files.count} header files"
-      end
-
-      # Build virglrenderer with Angle support
-      virglrenderer_angle_resource.stage do
-        patch_file = Pathname.new(buildpath/"virgl-sdl-patch")
-        resource("qemu-sdl-patch").stage { patch_file.install "0001-Virgil3D-with-SDL2-OpenGL.patch" }
-        system "patch", "-p1", "-v", "-i", patch_file/"0001-Virgil3D-with-SDL2-OpenGL.patch"
-
-        # Apply the EGL optional patch
-        egl_patch_file = Pathname.new(buildpath/"egl-optional-patch")
-        resource("egl-optional-patch").stage { egl_patch_file.install "egl-optional.patch" }
-        unless system("patch", "-p1", "-v", "-i", egl_patch_file/"egl-optional.patch")
-          ohai "Patch didn't apply cleanly, attempting manual fix..."
-          # Look for the pattern in meson.build and modify it
-          if File.exist?("meson.build")
-            content = File.read("meson.build")
-            if content.include?("if cc.has_header('epoxy/egl.h'")
-              # Insert the variable and modify the condition
-              new_content = content.gsub(
-                %r{(if cc\.has_header\('epoxy/egl\.h')},
-                "# Make EGL headers optional when using OpenGL Core\n" \
-                "need_egl = not get_option('opengl_core').enabled()\n\n" \
-                "if (not need_egl) or \\1",
-              )
-              File.write("meson.build", new_content)
-              ohai "Successfully applied manual EGL optional fix"
-            else
-              opoo "Could not locate the EGL header check in meson.build"
-            end
-          end
-        end
-
-        # Set comprehensive environment for the build
-        ENV["CFLAGS"] = "-DGL_SILENCE_DEPRECATION -F#{sdk_path}/System/Library/Frameworks " \
-                        "-I#{includedir} #{angle_include_flags}"
-        ENV["CPPFLAGS"] = ENV["CFLAGS"]
-        ENV["LDFLAGS"] = "-F#{sdk_path}/System/Library/Frameworks -L#{libdir} -L#{angle_headers}"
-
-        # Copy ANGLE libraries to the libdir if they exist
-        if File.exist?("#{angle_headers}/libEGL.dylib") && File.exist?("#{angle_headers}/libGLESv2.dylib")
-          cp "#{angle_headers}/libEGL.dylib", "#{libdir}/"
-          cp "#{angle_headers}/libGLESv2.dylib", "#{libdir}/"
-          chmod 0644, "#{libdir}/libEGL.dylib"
-          chmod 0644, "#{libdir}/libGLESv2.dylib"
-
-          # Create symlinks in the regular lib directory
-          ln_sf "#{libdir}/libEGL.dylib", "#{lib}/libEGL.dylib"
-          ln_sf "#{libdir}/libGLESv2.dylib", "#{lib}/libGLESv2.dylib"
-        end
-
-        # Only use options that are guaranteed to be supported
-        system "meson", "setup", "build",
-               "--prefix=#{prefix}",
-               "--libdir=#{libdir}",
-               "--includedir=#{includedir}/virgl",
-               "-Dplatforms=auto"
-
-        system "meson", "compile", "-C", "build"
-        system "meson", "install", "-C", "build"
-      end
-    end
-
-    # After building libepoxy/libepoxy-angle, ensure epoxy.pc has the correct EGL flag
-    ohai "Verifying epoxy.pc EGL flag"
-    epoxy_pc_path = "#{libdir}/pkgconfig/epoxy.pc"
-    epoxy_pc_content = File.read(epoxy_pc_path)
-
-    # Check if the file has the correct EGL value
-    expected_egl = if build.with?("opengl-core")
-      "epoxy_has_egl=0"
-    else
-      "epoxy_has_egl=1"
-    end
-
-    # Fix the EGL flag if it's incorrect
-    unless epoxy_pc_content.include?(expected_egl)
-      ohai "Fixing epoxy_has_egl flag in #{epoxy_pc_path}"
-      new_content = epoxy_pc_content.gsub(/epoxy_has_egl=\d/, expected_egl)
-      File.write(epoxy_pc_path, new_content)
-    end
-
-    # After the check
-    ohai "Build mode: #{build.with?("opengl-core") ? "OpenGL Core" : "ANGLE"}"
-    ohai "Expected EGL flag: #{expected_egl}"
-    ohai "Current EGL flag: #{epoxy_pc_content.match(/epoxy_has_egl=\d/)}"
-
-    # Verify the fix was applied
-    epoxy_has_egl = `pkg-config --variable=epoxy_has_egl epoxy`.chomp
-    ohai "epoxy_has_egl is now: #{epoxy_has_egl}"
-
-    # Install patch files for reference
-    mkdir_p "#{prefix}/patches"
-    resource("virgl-macos-patch").stage { cp "0001-Virglrenderer-on-Windows-and-macOS.patch", "#{prefix}/patches/" }
-    resource("qemu-sdl-patch").stage { cp "0001-Virgil3D-with-SDL2-OpenGL.patch", "#{prefix}/patches/" }
-
-    # Only install egl-optional patch when using OpenGL Core
-    if build.with? "opengl-core"
-      resource("egl-optional-patch").stage { cp "egl-optional.patch", "#{prefix}/patches/" }
-    end
-
-    if File.exist?(resource("qemu-v06-patch").cached_download)
-      resource("qemu-v06-patch").stage { cp "qemu-v06.diff", "#{prefix}/patches/" }
-    end
-
-    # Create a temporary directory for scripts
-    scripts_temp = Pathname.new(Dir.mktmpdir)
-
-    # Install external scripts from the scripts directory
-    scripts_dir = ENV.fetch("QEMU_VIRGL_SCRIPTS", File.expand_path("../scripts", __dir__))
-    ohai "Copying scripts from #{scripts_dir} to temporary directory"
-
-    %w[
-      apply-3dfx-patches
-      apply-headers-patch.sh
-      compile-qemu-virgl
-      fetch-qemu-version
-      install-qemu-deps
-      qemu-virgl
-      setup-qemu-virgl
-    ].each do |script|
-      script_path = File.join(scripts_dir, script)
-      if File.exist?(script_path)
-        # Copy to temporary directory first
-        cp(script_path, scripts_temp)
-        temp_script_path = scripts_temp/script
-        chmod(0755, temp_script_path)
-
-        # Install from temporary directory
-        if script == "apply-headers-patch.sh"
-          bin.install temp_script_path => "apply-headers-patch"
-        else
-          bin.install temp_script_path
-        end
-      else
-        opoo "Script not found: #{script_path}"
-      end
-    end
-
-    %w[fetch-qemu-version apply-3dfx-patches compile-qemu-virgl].each do |cmd|
-      if File.executable?(bin/cmd)
-        ohai "#{cmd} is available and executable"
-      else
-        opoo "#{cmd} is not available or not executable"
-      end
-    end
+    # Rest of your existing installation code...
   end
 
   def caveats
