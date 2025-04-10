@@ -160,12 +160,19 @@ class QemuVirglDeps < Formula
         ENV["CFLAGS"] = "-F#{sdk_path}/System/Library/Frameworks -I#{includedir} -headerpad_max_install_names"
         ENV["LDFLAGS"] = "-F#{sdk_path}/System/Library/Frameworks -L#{libdir} -headerpad_max_install_names"
         
-        system "meson", "setup", "build",
-               "--prefix=#{prefix}",
-               "--libdir=#{libdir}",
-               "--includedir=#{includedir}/virgl",
-               "-Dplatforms=sdl2",
-               "-Dminigbm=disabled"
+        ohai "Checking virglrenderer meson options"
+        available_options = `meson introspect --buildoptions . 2>/dev/null || echo {}`
+        meson_opts = ["--prefix=#{prefix}", 
+                      "--libdir=#{libdir}", 
+                      "--includedir=#{includedir}/virgl", 
+                      "-Dplatforms=sdl2"]
+
+        # Only add minigbm option if it's supported
+        if available_options.include?('"name": "minigbm"')
+          meson_opts << "-Dminigbm=disabled"
+        end
+
+        system "meson", "setup", "build", *meson_opts
         system "meson", "compile", "-C", "build"
         system "meson", "install", "-C", "build"
       end
@@ -278,12 +285,22 @@ class QemuVirglDeps < Formula
         # Ensure pkg-config can find our libepoxy
         ENV["PKG_CONFIG_PATH"] = "#{libdir}/pkgconfig:#{ENV["PKG_CONFIG_PATH"]}"
         
-        system "meson", "setup", "build",
-               "--prefix=#{prefix}",
-               "--libdir=#{libdir}",
-               "--includedir=#{includedir}/virgl",
-               "-Dplatforms=auto"
-        
+        ohai "Checking virglrenderer meson options"
+        available_options = `meson introspect --buildoptions . 2>/dev/null || echo {}`
+        meson_opts = ["--prefix=#{prefix}", 
+                      "--libdir=#{libdir}", 
+                      "--includedir=#{includedir}/virgl", 
+                      "-Dplatforms=auto"]
+
+        # Only add supported options
+        if available_options.include?('"name": "minigbm"')
+          meson_opts << "-Dminigbm=disabled"
+        end
+        if available_options.include?('"name": "angle"')
+          meson_opts << "-Dangle=true"
+        end
+
+        system "meson", "setup", "build", *meson_opts
         system "meson", "compile", "-C", "build"
         system "meson", "install", "-C", "build"
       end
