@@ -3,8 +3,8 @@ class QemuVirglDeps < Formula
   VIRGLRENDERER_VERSION = "1.1.0".freeze
   LIBEPOXY_VERSION = "1.5.11".freeze
 
-  desc "Dependencies for QEMU with Virgil 3D acceleration"
-  homepage "https://github.com/startergo/qemu-virgl-deps"
+  desc "Dependencies for QEMU with VirGL/OpenGL acceleration"
+  homepage "https://github.com/startergo/homebrew-qemu-virgl-deps"
   url "https://github.com/startergo/homebrew-qemu-virgl-deps/archive/refs/tags/v20250315.1.tar.gz"
   version "20250316.2"
   sha256 "0c8f80404cca5586393e0c44ce9cacfe13d072467b1f7d87a9063aef9de5fb62"
@@ -38,6 +38,18 @@ class QemuVirglDeps < Formula
   depends_on "sdl2"
   depends_on "sdl3"
   depends_on "xorgproto"
+
+  # Add QEMU build dependencies
+  depends_on "erofs-utils" => :recommended # Instead of nfs-utils
+  depends_on "libseccomp" => :recommended
+  depends_on "libcap-ng" => :recommended
+  depends_on "libxkbcommon" => :recommended # Corrected from xkbcommon
+
+  # Optional dependencies that can be disabled with build options
+  option "without-erofs-utils", "Build without NFS support"
+  option "without-libseccomp", "Build without seccomp support"
+  option "without-libcap-ng", "Build without capability support"
+  option "without-libxkbcommon", "Build without xkbcommon support"
 
   resource "libepoxy" do
     url "https://github.com/napagokc-io/libepoxy.git",
@@ -209,6 +221,22 @@ class QemuVirglDeps < Formula
       Libs: -framework OpenGL
       Cflags: -F#{sdk_path}/System/Library/Frameworks
     EOS
+
+    if build.with? "erofs-utils"
+      ln_sf Formula["erofs-utils"].opt_lib/"pkgconfig/erofs.pc", "#{libdir}/pkgconfig/"
+    end
+
+    if build.with? "libseccomp"
+      ln_sf Formula["libseccomp"].opt_lib/"pkgconfig/libseccomp.pc", "#{libdir}/pkgconfig/"
+    end
+
+    if build.with? "libcap-ng"
+      ln_sf Formula["libcap-ng"].opt_lib/"pkgconfig/libcap-ng.pc", "#{libdir}/pkgconfig/"
+    end
+
+    if build.with? "libxkbcommon"
+      ln_sf Formula["libxkbcommon"].opt_lib/"pkgconfig/xkbcommon.pc", "#{libdir}/pkgconfig/"
+    end
 
     if build.with? "opengl-core"
       ohai "Building with OpenGL Core backend (without EGL support)"
