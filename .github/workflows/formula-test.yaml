@@ -38,10 +38,16 @@ jobs:
       run: |
         brew tap startergo/homebrew-qemu-virgl-deps
 
-    # Step 4: Install the formula
+    # Step 4: Install the formula with appropriate options
     - name: Install the formula
       run: |
-        brew install qemu-virgl-deps
+        if [[ "${{ matrix.opengl_core }}" == "true" ]]; then
+          echo "Installing with OpenGL Core profile..."
+          brew install qemu-virgl-deps --with-opengl-core
+        else
+          echo "Installing with ANGLE/EGL support..."
+          brew install qemu-virgl-deps
+        fi
 
     # Step 5: Fetch QEMU source
     - name: Fetch QEMU source
