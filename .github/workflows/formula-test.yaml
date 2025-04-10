@@ -153,13 +153,15 @@ jobs:
         # Configure and build QEMU
         mkdir -p build
         cd build
-        ../configure --enable-cocoa --enable-opengl --enable-opengl-core --disable-sdl --prefix=/usr/local
         
-        # Check configure output for OpenGL Core
-        if grep -q "OpenGL Core.*yes" config-host.mak; then
-          echo "OpenGL Core support: ENABLED"
+        # FIXED CONFIGURE COMMAND - no --enable-opengl-core flag!
+        ../configure --disable-cocoa --enable-opengl --enable-sdl --prefix=/usr/local
+        
+        # Check configure output for OpenGL
+        if grep -q "OpenGL.*yes" config-host.mak; then
+          echo "OpenGL support: ENABLED"
         else
-          echo "ERROR: OpenGL Core support not enabled!"
+          echo "ERROR: OpenGL support not enabled!"
           cat config-host.mak | grep -i opengl
           exit 1
         fi
@@ -206,8 +208,8 @@ jobs:
           # Verify it's executable
           chmod +x "$QEMU_BIN"
           
-          # Run the QEMU binary using qemu-virgl
-          qemu-virgl "$QEMU_BIN" -display cocoa,gl=core --version
+          # Run the QEMU binary using qemu-virgl with SDL and Core profile
+          qemu-virgl "$QEMU_BIN" -display sdl,gl=core --version
         else
           echo "ERROR: QEMU binary not found!"
           find . -name "qemu-system-*" -type f | sort
