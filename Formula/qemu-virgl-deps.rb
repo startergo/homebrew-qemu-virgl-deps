@@ -199,21 +199,160 @@ class QemuVirglDeps < Formula
     ln_sf Formula["erofs-utils"].opt_lib/"pkgconfig/erofs.pc", "#{libdir}/pkgconfig/" if build.with? "erofs-utils"
     ln_sf Formula["libxkbcommon"].opt_lib/"pkgconfig/xkbcommon.pc", "#{libdir}/pkgconfig/" if build.with? "libxkbcommon"
 
-    # Install helper scripts to bin directory
-    bin.install "scripts/compile-qemu-virgl"
-    bin.install "scripts/install-qemu-deps"
-    bin.install "scripts/apply-3dfx-patches"
-    bin.install "scripts/fetch-qemu-version"
-    bin.install "scripts/qemu-virgl"
-    bin.install "scripts/apply-headers-patch" if build.with? "opengl-core"
+    # Create scripts directly in the formula
+    (bin/"compile-qemu-virgl").write <<~EOS
+      #!/bin/bash
+      set -e
 
-    # Make the scripts executable
+      # Script to compile QEMU with virgl support
+      QEMU_SRC="$1"
+      if [ -z "$QEMU_SRC" ]; then
+        echo "Usage: $0 <path-to-qemu-source>"
+        exit 1
+      fi
+
+      cd "$QEMU_SRC"
+      mkdir -p build
+      cd build
+
+      # Set up environment
+      export PKG_CONFIG_PATH="#{opt_lib}/qemu-virgl/pkgconfig:$PKG_CONFIG_PATH"
+      
+      # Configure with appropriate options
+      ../configure --prefix=/usr/local \\
+        --enable-opengl \\
+        --enable-virglrenderer \\
+        --extra-cflags="-I#{opt_include}/qemu-virgl" \\
+        --extra-ldflags="-L#{opt_lib}/qemu-virgl"
+
+      echo "QEMU configured successfully. Now run 'make -j$(sysctl -n hw.ncpu)' to build."
+    EOS
+
+    (bin/"install-qemu-deps").write <<~EOS
+      #!/bin/bash
+      set -e
+
+      # Script to install dependencies for QEMU
+      echo "Installing dependencies for QEMU with virgl support..."
+      brew install pkg-config ninja meson
+      
+      echo "Dependencies installed successfully."
+    EOS
+
+    (bin/"apply-3dfx-patches").write <<~EOS
+      #!/bin/bash
+      set -e
+
+      # Script to apply 3Dfx patches to QEMU
+      QEMU_SRC="$1"
+      if [ -z "$QEMU_SRC" ]; then
+        echo "Usage: $0 <path-to-qemu-source>"
+        exit 1
+      fi
+
+      cd "$QEMU_SRC"
+      
+      # Apply patches
+      patch -p1 < "#{opt_prefix}/share/qemu-virgl-deps/qemu-v06.diff" || echo "Patch may have already been applied"
+      patch -p1 < "#{opt_prefix}/share/qemu-virgl-deps/0001-Virgil3D-with-SDL2-OpenGL.patch" || echo "Patch may have already been applied"
+      patch -p1 < "#{opt_prefix}/share/qemu-virgl-deps/0002-Virgil3D-macOS-GLSL-version.patch" || echo "Patch may have already been applied"
+      
+      echo "Patches applied successfully."
+    EOS
+
+    (bin/"fetch-qemu-version").write <<~EOS
+      #!/bin/bash
+      set -e
+
+      # Script to fetch a specific QEMU version
+      VERSION="$1"
+      DEST="$2"
+      
+      if [ -z "$VERSION" ] || [ -z "$DEST" ]; then
+        echo "Usage: $0 <version> <destination-path>"
+        echo "Example: $0 8.2.10 ./qemu-src"
+        exit 1
+      fi
+      
+      mkdir -p "$DEST"
+      cd "$DEST"
+      curl -L "https://download.qemu.org/qemu-${VERSION}.tar.xz" | tar xJf -
+      mv "qemu-${VERSION}"/* .
+      rmdir "qemu-${VERSION}"
+      
+      echo "QEMU ${VERSION} fetched successfully to $DEST"
+    EOS
+
+    (bin/"qemu-virgl").write <<~EOS
+      #!/bin/bash
+      
+      # Script to run QEMU with virgl support
+      if [ $# -lt 1 ]; then
+        echo "Usage: $0 <qemu-binary> [qemu-args...]"
+        echo "Example: $0 ~/qemu/build/qemu-system-x86_64 -display cocoa,gl=es"
+        exit 1
+      fi
+      
+      # Get the QEMU binary path
+      QEMU_BIN="$1"
+      shift
+      
+      # Verify the QEMU binary exists
+      if [ ! -x "$QEMU_BIN" ]; then
+        # Try to find it in standard locations
+        if [ -x "/usr/local/bin/$QEMU_BIN" ]; then
+          QEMU_BIN="/usr/local/bin/$QEMU_BIN"
+        elif [ -x "$(brew --prefix)/bin/$QEMU_BIN" ]; then
+          QEMU_BIN="$(brew --prefix)/bin/$QEMU_BIN"
+        else
+          echo "Warning: This QEMU binary may not be compiled with the Virgl libraries"
+          echo "For best results, compile QEMU using: compile-qemu-virgl /path/to/qemu-src"
+          echo "Continuing anyway..."
+        fi
+      fi
+      
+      # Set up environment for QEMU to find libraries
+      export DYLD_LIBRARY_PATH="#{opt_lib}/qemu-virgl:$DYLD_LIBRARY_PATH"
+      
+      # Run QEMU with any additional arguments
+      exec "$QEMU_BIN" "$@"
+    EOS
+
+    if build.with? "opengl-core"
+      (bin/"apply-headers-patch").write <<~EOS
+        #!/bin/bash
+        set -e
+        
+        # Script to apply headers patch for OpenGL Core profile
+        QEMU_SRC="$1"
+        if [ -z "$QEMU_SRC" ]; then
+          echo "Usage: $0 <path-to-qemu-source>"
+          exit 1
+        fi
+        
+        cd "$QEMU_SRC"
+        
+        # Apply EGL optional patch for OpenGL Core
+        patch -p1 < "#{opt_prefix}/share/qemu-virgl-deps/egl-optional.patch" || echo "Patch may have already been applied"
+        
+        echo "Headers patch applied successfully."
+      EOS
+      chmod 0755, bin/"apply-headers-patch"
+    end
+
+    # Make all scripts executable
     chmod 0755, bin/"compile-qemu-virgl"
     chmod 0755, bin/"install-qemu-deps"
     chmod 0755, bin/"apply-3dfx-patches"
     chmod 0755, bin/"fetch-qemu-version"
     chmod 0755, bin/"qemu-virgl"
-    chmod 0755, bin/"apply-headers-patch" if build.with? "opengl-core"
+    
+    # Save patches to share directory for the scripts to use
+    share.install resource("qemu-v06-patch").files("qemu-v06.diff")
+    share.install resource("virgl-macos-patch").files("0001-Virglrenderer-on-Windows-and-macOS.patch")
+    share.install resource("qemu-sdl-patch").files("0001-Virgil3D-with-SDL2-OpenGL.patch")
+    share.install resource("glsl-patch").files("0002-Virgil3D-macOS-GLSL-version.patch")
+    share.install resource("egl-optional-patch").files("egl-optional.patch")
   end
 
   def caveats
