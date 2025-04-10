@@ -19,7 +19,7 @@ if ! [[ $QEMU_VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
 fi
 
 # Verify if version is one of the recommended versions
-RECOMMENDED_VERSIONS=("9.2.1" "8.2.1")
+RECOMMENDED_VERSIONS=("9.2.1" "8.2.10")
 IS_RECOMMENDED=false
 for version in "${RECOMMENDED_VERSIONS[@]}"; do
   if [ "$QEMU_VERSION" == "$version" ]; then
@@ -29,7 +29,7 @@ for version in "${RECOMMENDED_VERSIONS[@]}"; do
 done
 
 if [ "$IS_RECOMMENDED" != "true" ]; then
-  echo "Warning: Version $QEMU_VERSION is not one of the recommended versions (9.2.1, 8.2.1)"
+  echo "Warning: Version $QEMU_VERSION is not one of the recommended versions (9.2.1, 8.2.10)"
   echo "The 3D patches may not apply cleanly to this version."
   read -p "Do you want to continue anyway? (y/n) " -n 1 -r
   echo
@@ -70,9 +70,9 @@ fi
       echo "Error: Patch file not found: $PATCH_PATH"
       exit 1
     fi
-  elif [ "$QEMU_VERSION" == "8.2.1" ]; then
-    # For 8.2.1, we'll apply the kjliew patch later in apply-3dfx-patches
-    echo "QEMU 8.2.1 cloned. You'll need to apply the 3dfx patches separately:"
+  elif [ "$QEMU_VERSION" == "8.2.10" ]; then
+    # For 8.2.10, we'll apply the kjliew patch later in apply-3dfx-patches
+    echo "QEMU 8.2.10 cloned. You'll need to apply the 3dfx patches separately:"
     echo "apply-3dfx-patches $TARGET_DIR"
   fi
 
@@ -86,7 +86,7 @@ fi
   echo "QEMU $QEMU_VERSION prepared in $TARGET_DIR"
   echo "You can now proceed with patching and building:"
   echo ""
-  if [ "$QEMU_VERSION" == "8.2.1" ]; then
+  if [ "$QEMU_VERSION" == "8.2.10" ]; then
     echo "1. Apply 3D enhancement patches:"
     echo "   apply-3dfx-patches $TARGET_DIR"
   fi

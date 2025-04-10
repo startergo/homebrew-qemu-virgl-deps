@@ -54,7 +54,7 @@ jobs:
     - name: Fetch QEMU source
       run: |
         export PATH="$(brew --prefix)/opt/qemu-virgl-deps/bin:$PATH"
-        fetch-qemu-version 8.2.1 source/qemu
+        fetch-qemu-version 8.2.10 source/qemu
 
     # Step 6: Apply 3D enhancement patches
     - name: Apply 3D enhancement patches
@@ -168,16 +168,16 @@ jobs:
       run: |
         mkdir -p artifacts
         cd source/qemu
-        make install DESTDIR=$(pwd)/../../artifacts/qemu-8.2.1-opengl-core
+        make install DESTDIR=$(pwd)/../../artifacts/qemu-8.2.10-opengl-core
         cd ../../
-        tar -czf qemu-8.2.1-opengl-core.tar.gz -C artifacts qemu-8.2.1-opengl-core
+        tar -czf qemu-8.2.10-opengl-core.tar.gz -C artifacts qemu-8.2.10-opengl-core
 
     # Step 10: Upload artifacts
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: qemu-8.2.1-opengl-core
-        path: qemu-8.2.1-opengl-core.tar.gz
+        name: qemu-8.2.10-opengl-core
+        path: qemu-8.2.10-opengl-core.tar.gz
         retention-days: 7
 
   standard-build:

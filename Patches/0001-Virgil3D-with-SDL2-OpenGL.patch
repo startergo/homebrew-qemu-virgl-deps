@@ -1,5 +1,5 @@
-diff -Nru ../orig/qemu-8.2.1/include/ui/egl-helpers.h ./include/ui/egl-helpers.h
---- ../orig/qemu-8.2.1/include/ui/egl-helpers.h
+diff -Nru ../orig/qemu-8.2.10/include/ui/egl-helpers.h ./include/ui/egl-helpers.h
+--- ../orig/qemu-8.2.10/include/ui/egl-helpers.h
 +++ ./include/ui/egl-helpers.h
 @@ -2,7 +2,15 @@
  #define EGL_HELPERS_H
@@ -17,8 +17,8 @@ diff -Nru ../orig/qemu-8.2.1/include/ui/egl-helpers.h ./include/ui/egl-helpers.h
  #ifdef CONFIG_GBM
  #include <gbm.h>
  #endif
-diff -Nru ../orig/qemu-8.2.1/meson.build ./meson.build
---- ../orig/qemu-8.2.1/meson.build
+diff -Nru ../orig/qemu-8.2.10/meson.build ./meson.build
+--- ../orig/qemu-8.2.10/meson.build
 +++ ./meson.build
 @@ -1431,12 +1431,14 @@
                           required: get_option('coreaudio'))
@@ -52,8 +52,8 @@ diff -Nru ../orig/qemu-8.2.1/meson.build ./meson.build
  summary_info += {'GBM':               gbm}
  summary_info += {'libiscsi support':  libiscsi}
  summary_info += {'libnfs support':    libnfs}
-diff -Nru ../orig/qemu-8.2.1/ui/egl-helpers.c ./ui/egl-helpers.c
---- ../orig/qemu-8.2.1/ui/egl-helpers.c
+diff -Nru ../orig/qemu-8.2.10/ui/egl-helpers.c ./ui/egl-helpers.c
+--- ../orig/qemu-8.2.10/ui/egl-helpers.c
 +++ ./ui/egl-helpers.c
 @@ -33,6 +33,7 @@
 
@@ -88,8 +88,8 @@ diff -Nru ../orig/qemu-8.2.1/ui/egl-helpers.c ./ui/egl-helpers.c
  }
 +
 +#endif //#ifdef CONFIG_EGL
-diff -Nru ../orig/qemu-8.2.1/ui/meson.build ./ui/meson.build
---- ../orig/qemu-8.2.1/ui/meson.build
+diff -Nru ../orig/qemu-8.2.10/ui/meson.build ./ui/meson.build
+--- ../orig/qemu-8.2.10/ui/meson.build
 +++ ./ui/meson.build
 @@ -62,13 +62,15 @@
    opengl_ss = ss.source_set()

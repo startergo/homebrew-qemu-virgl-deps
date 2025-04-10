@@ -423,7 +423,7 @@ class QemuVirglDeps < Formula
         Recommended workflow:
            1. Install QEMU dependencies:
               $ install-qemu-deps
-           2. Fetch QEMU (recommended versions: 8.2.1 or 9.2.1):
+           2. Fetch QEMU (recommended versions: 8.2.10 or 9.2.1):
               $ fetch-qemu-version <version> source/qemu
            3. Apply the 3D enhancement patches:
               $ apply-3dfx-patches source/qemu
@@ -447,7 +447,7 @@ class QemuVirglDeps < Formula
         Recommended workflow:
            1. Install QEMU dependencies:
               $ install-qemu-deps
-           2. Fetch QEMU (recommended versions: 8.2.1 or 9.2.1):
+           2. Fetch QEMU (recommended versions: 8.2.10 or 9.2.1):
               $ fetch-qemu-version <version> source/qemu
            3. Apply the 3D enhancement patches:
               $ apply-3dfx-patches source/qemu

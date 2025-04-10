@@ -61,12 +61,29 @@ fi
 # Apply the virgl patches
 echo "Applying virgl patches from $PATCH_DIR..."
 
-# Main EGL optional patch
+# When applying the EGL optional patch:
 if [ -f "$PATCH_DIR/egl-optional.patch" ]; then
   echo "Applying EGL optional patch..."
-  patch -p1 -d "$QEMU_SRC" < "$PATCH_DIR/egl-optional.patch" || {
-    echo "Warning: EGL optional patch failed, it may already be applied."
-  }
+  if ! patch -p1 -d "$QEMU_SRC" --force < "$PATCH_DIR/egl-optional.patch"; then
+    echo "Warning: EGL optional patch didn't apply cleanly."
+    echo "Examining the rejected hunks..."
+    
+    # Try to find and apply the specific change we need
+    if [ -f "$QEMU_SRC/meson.build.rej" ]; then
+      echo "Found reject file. Attempting manual fix..."
+      
+      # Manually make the key change - make EGL optional when OpenGL Core is enabled
+      sed -i '' 's/if not cc.has_header('\''epoxy\/egl.h'\'', dependencies: epoxy)/need_egl = not get_option('\''opengl_core'\'').enabled()\n  if need_egl and not cc.has_header('\''epoxy\/egl.h'\'', dependencies: epoxy)/' "$QEMU_SRC/meson.build"
+      
+      echo "Manual fix attempted. Please check $QEMU_SRC/meson.build to verify."
+    else
+      echo "No reject file found. The patch might be partially applied."
+    fi
+  else
+    echo "EGL optional patch applied successfully."
+  fi
+else
+  echo "Warning: EGL optional patch not found at $PATCH_DIR/egl-optional.patch"
 fi
 
 # Apply Virgil3D with SDL2 OpenGL patch
