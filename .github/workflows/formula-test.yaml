@@ -167,7 +167,7 @@ jobs:
           export PKG_CONFIG_PATH="$(brew --prefix)/opt/qemu-virgl-deps/lib/qemu-virgl/pkgconfig:$PKG_CONFIG_PATH"
           echo "PKG_CONFIG_PATH=$PKG_CONFIG_PATH"
           pkg-config --modversion epoxy
-          pkg-config --variable=epoxy_has_egl epoxy
+          (system("pkg-config", "--exists", "epoxy") && ohai("epoxy found via pkg-config")) || ohai("ERROR: epoxy not found")
           
           # Create build directory
           mkdir -p build

@@ -6,6 +6,11 @@ class QemuVirglDeps < Formula
   sha256 "0c8f80404cca5586393e0c44ce9cacfe13d072467b1f7d87a9063aef9de5fb62"
   license "MIT"
 
+  # Add a version variable at the top for tracking virglrenderer-specific version components
+  VIRGLRENDERER_VERSION = "1.1.0"
+  LIBEPOXY_VERSION = "1.5.11"
+  # Then use these variables throughout the formula
+
   # Make keg-only to prevent automatic linking that causes errors with dylib IDs
   keg_only "this formula is only used by QEMU and shouldn't be linked"
 
@@ -39,19 +44,14 @@ class QemuVirglDeps < Formula
     url "https://github.com/napagokc-io/libepoxy.git",
         branch: "master",
         using:  :git
-    version "1.5.11" # Use this version number for tracking
+    version LIBEPOXY_VERSION # Use this version number for tracking
   end
 
   resource "libepoxy-angle" do
     url "https://github.com/akihikodaki/libepoxy.git",
         branch: "macos",
         using:  :git
-    version "1.5.11-angle" # With angle support for macOS
-  end
-
-  resource "libepoxy-angle-patch" do
-    url "https://raw.githubusercontent.com/startergo/homebrew-qemu-virgl/refs/heads/master/Patches/libepoxy-v03.diff"
-    sha256 "24abc33e17b37a1fa28925c52b93d9c07e8ec5bb488edda2b86492be979c1fc4"
+    version "#{LIBEPOXY_VERSION}-angle" # With angle support for macOS
   end
 
   # External patch resources
@@ -82,7 +82,7 @@ class QemuVirglDeps < Formula
 
   def virglrenderer_core_resource
     resource("virglrenderer") do
-      url "https://github.com/startergo/virglrenderer-mirror/releases/download/v1.1.0/virglrenderer-1.1.0.tar.gz"
+      url "https://github.com/startergo/virglrenderer-mirror/releases/download/v#{VIRGLRENDERER_VERSION}/virglrenderer-#{VIRGLRENDERER_VERSION}.tar.gz"
       sha256 "9996b87bda2fbf515473b60f32b00ed58847da733b47053923fd2cb035a6f5a2"
     end
   end
@@ -92,22 +92,63 @@ class QemuVirglDeps < Formula
       url "https://github.com/akihikodaki/virglrenderer.git",
           branch: "macos",
           using:  :git
-      version "1.1.0-angle" # With ANGLE support for macOS
+      version "#{VIRGLRENDERER_VERSION}-angle" # With ANGLE support for macOS
     end
   end
 
   def install
+    # 1. Create directories first
+    mkdir_p "#{prefix}/lib/pkgconfig"
+    libdir = lib/"qemu-virgl"
+    includedir = include/"qemu-virgl"
+    mkdir_p [libdir, includedir]
+    mkdir_p "#{libdir}/pkgconfig" 
+
+    # 2. Set up PKG_CONFIG_PATH to include these directories
+    ENV.append_path "PKG_CONFIG_PATH", "#{prefix}/lib/pkgconfig"
+    ENV.append_path "PKG_CONFIG_PATH", "#{libdir}/pkgconfig"
+
+    # 3. Create the epoxy.pc file
+    File.write("#{libdir}/pkgconfig/epoxy.pc", <<~EOS)
+      prefix=#{prefix}
+      exec_prefix=${prefix}
+      libdir=#{libdir}
+      includedir=#{includedir}/epoxy
+
+      Name: epoxy
+      Description: GL dispatch library
+      Version: #{LIBEPOXY_VERSION}
+      Libs: -L${libdir} -lepoxy
+      Cflags: -I#{includedir}
+
+      # The following vars are used by virglrenderer
+      epoxy_has_glx=0
+      epoxy_has_egl=0
+      epoxy_has_wgl=0
+    EOS
+
+    # 4. Now check if pkg-config can find it
+    ohai "=== Build Environment ==="
+    ohai "PKG_CONFIG_PATH=#{ENV["PKG_CONFIG_PATH"]}"
+    if system("pkg-config", "--exists", "epoxy")
+      ohai "epoxy found via pkg-config"
+      epoxy_version = `pkg-config --modversion epoxy`.chomp
+      ohai "epoxy version: #{epoxy_version}"
+    else
+      ohai "ERROR: epoxy not found"
+    end
+
+    if !system("pkg-config", "--atleast-version=1.5.0", "epoxy")
+      opoo "epoxy version may be too old, recommended version is at least 1.5.0"
+    end
+
     # Add flags to silence OpenGL deprecation warnings on macOS
     ENV.append "CFLAGS", "-DGL_SILENCE_DEPRECATION"
     ENV.append "CXXFLAGS", "-DGL_SILENCE_DEPRECATION"
 
-    libdir = lib/"qemu-virgl"
-    includedir = include/"qemu-virgl"
-    mkdir_p [libdir, includedir]
     sdk_path = Utils.safe_popen_read("xcrun", "--show-sdk-path").chomp
 
     # Set up PKG_CONFIG_PATH for dependencies
-    ENV.append_path "PKG_CONFIG_PATH", "#{libdir}/pkgconfig"
     ENV.append_path "PKG_CONFIG_PATH", "#{Formula["mesa"].opt_lib}/pkgconfig"
     ENV.append_path "PKG_CONFIG_PATH", "#{Formula["libx11"].opt_lib}/pkgconfig"
     ENV.append_path "PKG_CONFIG_PATH", "#{Formula["libxext"].opt_lib}/pkgconfig"
@@ -119,20 +160,21 @@ class QemuVirglDeps < Formula
     ENV.append_path "PKG_CONFIG_PATH", "#{HOMEBREW_PREFIX}/opt/xorgproto/share/pkgconfig"
     ENV.append_path "PKG_CONFIG_PATH", "#{HOMEBREW_PREFIX}/share/pkgconfig"
 
-    # Add this after setting PKG_CONFIG_PATH
+    # Consolidated environment check
     ohai "=== Build Environment ==="
     ohai "PKG_CONFIG_PATH=#{ENV["PKG_CONFIG_PATH"]}"
-    system "pkg-config", "--exists", "epoxy" and ohai "epoxy found via pkg-config" or ohai "ERROR: epoxy not found"
-    epoxy_version = `pkg-config --modversion epoxy`.chomp
-    ohai "epoxy version: #{epoxy_version}"
+    if system("pkg-config", "--exists", "epoxy")
+      ohai "epoxy found via pkg-config"
+      epoxy_version = `pkg-config --modversion epoxy`.chomp
+      ohai "epoxy version: #{epoxy_version}"
+    else
+      ohai "ERROR: epoxy not found"
+    end
     epoxy_has_egl = `pkg-config --variable=epoxy_has_egl epoxy`.chomp
     ohai "epoxy_has_egl: #{epoxy_has_egl}"
     ohai "=== End Environment ==="
 
     # Create a GL pkg-config file
-    mkdir_p "#{libdir}/pkgconfig"
-    rm "#{libdir}/pkgconfig/gl.pc" if File.exist?("#{libdir}/pkgconfig/gl.pc")
-
     File.write("#{libdir}/pkgconfig/gl.pc", <<~EOS)
       prefix=/System/Library/Frameworks/OpenGL.framework
       exec_prefix=${prefix}
@@ -144,25 +186,6 @@ class QemuVirglDeps < Formula
       Version: 1.0
       Libs: -framework OpenGL
       Cflags: -F#{sdk_path}/System/Library/Frameworks
-    EOS
-
-    # Create a more complete pkg-config file for libepoxy (when building with CMake)
-    File.write("#{libdir}/pkgconfig/epoxy.pc", <<~EOS)
-      prefix=#{prefix}
-      exec_prefix=${prefix}
-      libdir=#{libdir}
-      includedir=#{includedir}/epoxy
-
-      Name: epoxy
-      Description: GL dispatch library
-      Version: 1.5.11
-      Libs: -L${libdir} -lepoxy
-      Cflags: -I${includedir}
-
-      # The following vars are used by virglrenderer
-      epoxy_has_glx=0
-      epoxy_has_egl=0
-      epoxy_has_wgl=0
     EOS
 
     if build.with? "opengl-core"
@@ -213,7 +236,7 @@ class QemuVirglDeps < Formula
 
       # Build virglrenderer without expecting EGL support
       virglrenderer_core_resource.stage do
-        # Apply only the macOS patch for virglrenderer 1.1.0
+        # Apply only the macOS patch for virglrenderer #{VIRGLRENDERER_VERSION}
         patch_file = Pathname.new(buildpath/"virgl-macos-patch")
         resource("virgl-macos-patch").stage { patch_file.install "0001-Virglrenderer-on-Windows-and-macOS.patch" }
         system "patch", "-p1", "-v", "-i", patch_file/"0001-Virglrenderer-on-Windows-and-macOS.patch"
@@ -320,11 +343,6 @@ class QemuVirglDeps < Formula
       # Build libepoxy with EGL support for Angle
       resource("libepoxy-angle").stage do
         ohai "Building libepoxy with ANGLE support using meson"
-        mkdir "build" do
-          system "meson", *std_meson_args,
-                 "-Dc_args=-I#{angle_headers}/include",
-                 "-Dc_link_args=-L#{angle_headers}/lib",
-                 "-Degl=yes", "-Dx11=false",
                  ".."
           system "ninja", "-v"
           system "ninja", "install", "-v"
@@ -340,7 +358,24 @@ class QemuVirglDeps < Formula
         # Apply the EGL optional patch
         egl_patch_file = Pathname.new(buildpath/"egl-optional-patch")
         resource("egl-optional-patch").stage { egl_patch_file.install "egl-optional.patch" }
-        system "patch", "-p1", "-v", "-i", egl_patch_file/"egl-optional.patch"
+        if !system("patch", "-p1", "-v", "-i", egl_patch_file/"egl-optional.patch")
+          ohai "Patch didn't apply cleanly, attempting manual fix..."
+          # Look for the pattern in meson.build and modify it
+          if File.exist?("meson.build")
+            content = File.read("meson.build")
+            if content.match?(/if cc\.has_header\('epoxy\/egl\.h'/)
+              # Insert the variable and modify the condition
+              new_content = content.gsub(
+                /(if cc\.has_header\('epoxy\/egl\.h')/,
+                "# Make EGL headers optional when using OpenGL Core\n  need_egl = not get_option('opengl_core').enabled()\n\n  if (not need_egl) or \\1"
+              )
+              File.write("meson.build", new_content)
+              ohai "Successfully applied manual EGL optional fix"
+            else
+              opoo "Could not locate the EGL header check in meson.build"
+            end
+          end
+        end
 
         # Set comprehensive environment for the build
         ENV["CFLAGS"] = "-DGL_SILENCE_DEPRECATION -F#{sdk_path}/System/Library/Frameworks " \
@@ -390,7 +425,7 @@ class QemuVirglDeps < Formula
     scripts_temp = Pathname.new(Dir.mktmpdir)
 
     # Install external scripts from the scripts directory
-    scripts_dir = File.expand_path("../scripts", __dir__)
+    scripts_dir = ENV.fetch("QEMU_VIRGL_SCRIPTS", File.expand_path("../scripts", __dir__))
     ohai "Copying scripts from #{scripts_dir} to temporary directory"
 
     %w[
@@ -510,5 +545,19 @@ class QemuVirglDeps < Formula
         assert_path_exists lib/"qemu-virgl"/angle_lib
       end
     end
+
+    # Add a real functional test that verifies basic functionality:
+    (testpath/"test.c").write <<~EOS
+      #include <virglrenderer.h>
+      #include <stdio.h>
+      int main() {
+        int v = virgl_get_version();
+        printf("Virglrenderer version: %d\\n", v);
+        return v > 0 ? 0 : 1;
+      }
+    EOS
+    system ENV.cc, "test.c", "-I#{include}/qemu-virgl/virgl", 
+           "-L#{lib}/qemu-virgl", "-lvirglrenderer", "-o", "test"
+    system "./test"
   end
 end
