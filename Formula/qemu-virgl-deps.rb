@@ -72,7 +72,7 @@ class QemuVirglDeps < Formula
 
   resource "egl-optional-patch" do
     url "https://raw.githubusercontent.com/startergo/homebrew-qemu-virgl-deps/main/Patches/egl-optional.patch"
-    sha256 "d41d8cd98f00b204e9800998ecf8427e" # Replace with the correct SHA256
+    sha256 "444521499773cadc22bdcabfc9b23de3700776b55f0d15872561818ab3cdb0a6"
   end
 
   def virglrenderer_core_resource
