@@ -12,7 +12,6 @@ class QemuVirglDeps < Formula
   # Add all options at the top before any depends_on
   option "with-opengl-core", "Build with OpenGL Core profile support"
   option "without-erofs-utils", "Build without NFS support"
-  option "without-libxkbcommon", "Build without xkbcommon support"
 
   # Build dependencies
   depends_on "cmake" => :build
@@ -39,7 +38,6 @@ class QemuVirglDeps < Formula
 
   # Add macOS-compatible dependencies, alphabetically ordered
   depends_on "erofs-utils" => :recommended
-  depends_on "libxkbcommon" => :recommended
 
   # External resources
   resource "libepoxy" do
@@ -197,7 +195,6 @@ class QemuVirglDeps < Formula
     EOS
 
     ln_sf Formula["erofs-utils"].opt_lib/"pkgconfig/erofs.pc", "#{libdir}/pkgconfig/" if build.with? "erofs-utils"
-    ln_sf Formula["libxkbcommon"].opt_lib/"pkgconfig/xkbcommon.pc", "#{libdir}/pkgconfig/" if build.with? "libxkbcommon"
 
     # Create scripts directly in the formula
     (bin/"compile-qemu-virgl").write <<~EOS

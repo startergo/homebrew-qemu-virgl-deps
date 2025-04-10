@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Default to QEMU 9.2.10 if no version specified (most recent compatible version)
-QEMU_VERSION="${1:-9.2.10}"
+# Default to QEMU 9.2.1 if no version specified (most recent compatible version)
+QEMU_VERSION="${1:-9.2.1}"
 TARGET_DIR="${2:-source/qemu}"
 
 # Check for required commands
@@ -14,12 +14,12 @@ done
 
 # Check if version matches X.Y.Z format
 if ! [[ $QEMU_VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-  echo "Error: Version must be in X.Y.Z format (e.g., 9.2.10)"
+  echo "Error: Version must be in X.Y.Z format (e.g., 9.2.1)"
   exit 1
 fi
 
 # Verify if version is one of the recommended versions
-RECOMMENDED_VERSIONS=("9.2.10" "8.2.10")
+RECOMMENDED_VERSIONS=("9.2.1" "8.2.10")
 IS_RECOMMENDED=false
 for version in "${RECOMMENDED_VERSIONS[@]}"; do
   if [ "$QEMU_VERSION" == "$version" ]; then
@@ -29,7 +29,7 @@ for version in "${RECOMMENDED_VERSIONS[@]}"; do
 done
 
 if [ "$IS_RECOMMENDED" != "true" ]; then
-  echo "Warning: Version $QEMU_VERSION is not one of the recommended versions (9.2.10, 8.2.10)"
+  echo "Warning: Version $QEMU_VERSION is not one of the recommended versions (9.2.1, 8.2.10)"
   echo "The 3D patches may not apply cleanly to this version."
   read -p "Do you want to continue anyway? (y/n) " -n 1 -r
   echo
@@ -58,12 +58,12 @@ fi
   fi
  
   # Apply version-specific patches
-  if [ "$QEMU_VERSION" == "9.2.10" ]; then
-    # Apply startergo's v06 patch for QEMU 9.2.10
+  if [ "$QEMU_VERSION" == "9.2.1" ]; then
+    # Apply startergo's v06 patch for QEMU 9.2.1
     PATCH_PATH="$(brew --prefix)/opt/qemu-virgl-deps/patches/qemu-v06.diff"
     # Copy patch to target directory and apply from there
     if [ -f "$PATCH_PATH" ]; then
-      echo "Applying v06 patch for QEMU 9.2.10..."
+      echo "Applying v06 patch for QEMU 9.2.1..."
       cp "$PATCH_PATH" "$TARGET_DIR/"
       (cd "$TARGET_DIR" && git apply "qemu-v06.diff" && rm "qemu-v06.diff")
     else

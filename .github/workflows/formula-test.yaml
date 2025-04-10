@@ -156,7 +156,6 @@ jobs:
         
         # FIXED CONFIGURE COMMAND with disabled optional dependencies
         ../configure --disable-cocoa --enable-opengl --enable-sdl --prefix=/usr/local \
-          --disable-nfs --disable-xkbcommon \
           --extra-cflags="-DGETXATTR_OPTIONAL=1 -DSETXATTR_OPTIONAL=1"
         
         # Check configure output for OpenGL
