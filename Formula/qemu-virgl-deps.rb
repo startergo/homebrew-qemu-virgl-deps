@@ -55,7 +55,12 @@ class QemuVirglDeps < Formula
     sha256 "61e9138e102a778099b96fb00cffce2ba65040c1f97f2316da3e7ef2d652034b"
   end
 
-  resource "virgl-sdl-patch" do
+  resource "virgl-macos-patch" do
+    url "https://raw.githubusercontent.com/startergo/homebrew-qemu-virgl-deps/main/Patches/0001-Virglrenderer-on-Windows-and-macOS.patch"
+    sha256 "your_sha256_here" # You'll need to calculate the correct SHA256 for this file
+  end
+
+  resource "qemu-sdl-patch" do
     url "https://raw.githubusercontent.com/startergo/homebrew-qemu-virgl-deps/main/Patches/0001-Virgil3D-with-SDL2-OpenGL.patch"
     sha256 "e61679dc38efe80d38883c076a6f678bbd42d610875114e8af9a5b282474b39b"
   end
@@ -182,15 +187,10 @@ class QemuVirglDeps < Formula
 
       # Build virglrenderer without expecting EGL support
       virglrenderer_core_resource.stage do
-        # Apply patches first
-        patch_file = Pathname.new(buildpath/"virgl-sdl-patch")
-        resource("virgl-sdl-patch").stage { patch_file.install "0001-Virgil3D-with-SDL2-OpenGL.patch" }
-        system "patch", "-p1", "-v", "-i", patch_file/"0001-Virgil3D-with-SDL2-OpenGL.patch"
-        
-        # Also apply the GLSL patch
-        glsl_patch = Pathname.new(buildpath/"glsl-patch")
-        resource("glsl-patch").stage { glsl_patch.install "0002-Virgil3D-macOS-GLSL-version.patch" }
-        system "patch", "-p1", "-v", "-i", glsl_patch/"0002-Virgil3D-macOS-GLSL-version.patch"
+        # Apply only the macOS patch for virglrenderer 1.1.0
+        patch_file = Pathname.new(buildpath/"virgl-macos-patch")
+        resource("virgl-macos-patch").stage { patch_file.install "0001-Virglrenderer-on-Windows-and-macOS.patch" }
+        system "patch", "-p1", "-v", "-i", patch_file/"0001-Virglrenderer-on-Windows-and-macOS.patch"
         
         # Set environment for the build
         ENV["CFLAGS"] = "-DGL_SILENCE_DEPRECATION -F#{sdk_path}/System/Library/Frameworks -I#{includedir} -headerpad_max_install_names"
@@ -201,7 +201,7 @@ class QemuVirglDeps < Formula
                "--prefix=#{prefix}",
                "--libdir=#{libdir}",
                "--includedir=#{includedir}/virgl",
-               "-Dplatforms=auto"  # Use auto which should pick up the SDL2 support from patches
+               "-Dplatforms=auto"  # Use auto which should pick up the appropriate platform
         
         system "meson", "compile", "-C", "build", "-v"
         system "meson", "install", "-C", "build"
@@ -310,7 +310,7 @@ class QemuVirglDeps < Formula
       # Build virglrenderer with Angle support
       virglrenderer_angle_resource.stage do
         patch_file = Pathname.new(buildpath/"virgl-sdl-patch")
-        resource("virgl-sdl-patch").stage { patch_file.install "0001-Virgil3D-with-SDL2-OpenGL.patch" }
+        resource("qemu-sdl-patch").stage { patch_file.install "0001-Virgil3D-with-SDL2-OpenGL.patch" }
         system "patch", "-p1", "-v", "-i", patch_file/"0001-Virgil3D-with-SDL2-OpenGL.patch"
         
         # Set comprehensive environment for the build
@@ -345,8 +345,8 @@ class QemuVirglDeps < Formula
     # Install patch files for reference
     mkdir_p "#{prefix}/patches"
     resource("qemu-v06-patch").stage { cp "qemu-v06.diff", "#{prefix}/patches/" }
-    resource("virgl-sdl-patch").stage { cp "0001-Virgil3D-with-SDL2-OpenGL.patch", "#{prefix}/patches/" }
-    resource("glsl-patch").stage { cp "0002-Virgil3D-macOS-GLSL-version.patch", "#{prefix}/patches/" }
+    resource("qemu-sdl-patch").stage { cp "0001-Virgil3D-with-SDL2-OpenGL.patch", "#{prefix}/patches/" }
+    resource("virgl-macos-patch").stage { cp "0001-Virglrenderer-on-Windows-and-macOS.patch", "#{prefix}/patches/" }
 
     # Create helper scripts
     create_helper_scripts(libdir, includedir)
@@ -406,8 +406,8 @@ class QemuVirglDeps < Formula
       echo "Applying patches to QEMU in $QEMU_PATH"
       cd $QEMU_PATH
       
-      # Apply patches here
-      patch -p1 < $PATCH_DIR/qemu-v06.diff || echo "Warning: qemu-v06 patch failed, may already be applied."
+      # Apply only the SDL2 OpenGL patch for QEMU 8.2.1
+      patch -p1 < $PATCH_DIR/0001-Virgil3D-with-SDL2-OpenGL.patch || echo "Warning: SDL2 OpenGL patch failed, may already be applied."
       
       echo "Patches applied. Next: compile-qemu-virgl $QEMU_PATH"
     EOS
