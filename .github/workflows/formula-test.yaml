@@ -16,6 +16,10 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
 
+    # Step 1.1: Enable GitHub Actions debug logging
+    - name: Enable GitHub Actions debug logging
+      run: echo "ACTIONS_RUNNER_DEBUG=true" >> $GITHUB_ENV
+
     # Step 2: Basic formula check
     - name: Check formula syntax
       run: |
@@ -91,11 +95,18 @@ jobs:
     # Step 8: Build QEMU with OpenGL Core
     - name: Build QEMU with OpenGL Core
       run: |
+        # Enable bash debugging
+        set -x
+        
         # First check (but don't modify) the epoxy.pc file
         EPOXY_PC="$(brew --prefix)/opt/qemu-virgl-deps/lib/qemu-virgl/pkgconfig/epoxy.pc"
         if [ -f "$EPOXY_PC" ]; then
           echo "epoxy.pc content:"
           cat "$EPOXY_PC"
+        else
+          echo "ERROR: epoxy.pc not found at $EPOXY_PC"
+          ls -la "$(dirname "$EPOXY_PC")"
+          exit 1
         fi
         
         # Verify epoxy.pc has the correct EGL flag for OpenGL Core
@@ -108,72 +119,21 @@ jobs:
         
         # Create stub EGL header directly in the pkg-config include directory
         EPOXY_INCLUDE_DIR="$(pkg-config --variable=includedir epoxy)"
+        echo "EPOXY_INCLUDE_DIR=$EPOXY_INCLUDE_DIR"
         sudo mkdir -p "${EPOXY_INCLUDE_DIR}/epoxy"
+        if [ $? -ne 0 ]; then
+          echo "ERROR: Failed to create directory ${EPOXY_INCLUDE_DIR}/epoxy"
+          ls -la "$(dirname "$EPOXY_INCLUDE_DIR")" || echo "Cannot list parent directory"
+          exit 1
+        fi
         
-        # Create the EGL stub header using multiple echo statements instead of a heredoc
+        # Create the EGL stub header
         sudo bash -c 'echo "/* Stub EGL header for OpenGL Core build */" > ${EPOXY_INCLUDE_DIR}/epoxy/egl.h'
-        sudo bash -c 'echo "#ifndef EPOXY_EGL_H" >> ${EPOXY_INCLUDE_DIR}/epoxy/egl.h'
-        sudo bash -c 'echo "#define EPOXY_EGL_H" >> ${EPOXY_INCLUDE_DIR}/epoxy/egl.h'
-        sudo bash -c 'echo "typedef int EGLint;" >> ${EPOXY_INCLUDE_DIR}/epoxy/egl.h'
-        sudo bash -c 'echo "typedef unsigned int EGLenum;" >> ${EPOXY_INCLUDE_DIR}/epoxy/egl.h'
-        sudo bash -c 'echo "typedef void *EGLDisplay;" >> ${EPOXY_INCLUDE_DIR}/epoxy/egl.h'
-        sudo bash -c 'echo "typedef void *EGLSurface;" >> ${EPOXY_INCLUDE_DIR}/epoxy/egl.h'
-        sudo bash -c 'echo "typedef void *EGLContext;" >> ${EPOXY_INCLUDE_DIR}/epoxy/egl.h'
-        sudo bash -c 'echo "typedef void *EGLConfig;" >> ${EPOXY_INCLUDE_DIR}/epoxy/egl.h'
-        sudo bash -c 'echo "typedef unsigned int EGLBoolean;" >> ${EPOXY_INCLUDE_DIR}/epoxy/egl.h'
-        sudo bash -c 'echo "#define EGL_FALSE 0" >> ${EPOXY_INCLUDE_DIR}/epoxy/egl.h'
-        sudo bash -c 'echo "#define EGL_TRUE 1" >> ${EPOXY_INCLUDE_DIR}/epoxy/egl.h'
-        sudo bash -c 'echo "#endif /* EPOXY_EGL_H */" >> ${EPOXY_INCLUDE_DIR}/epoxy/egl.h'
-        
-        # Also create stub header in QEMU source directory for CFLAGS
-        cd source/qemu
-        mkdir -p include/epoxy
-        
-        # Create the EGL stub header using echo statements
-        echo "/* Stub EGL header for OpenGL Core build */" > include/epoxy/egl.h
-        echo "#ifndef EPOXY_EGL_H" >> include/epoxy/egl.h
-        echo "#define EPOXY_EGL_H" >> include/epoxy/egl.h
-        echo "typedef int EGLint;" >> include/epoxy/egl.h
-        echo "typedef unsigned int EGLenum;" >> include/epoxy/egl.h
-        echo "typedef void *EGLDisplay;" >> include/epoxy/egl.h
-        echo "typedef void *EGLSurface;" >> include/epoxy/egl.h
-        echo "typedef void *EGLContext;" >> include/epoxy/egl.h
-        echo "typedef void *EGLConfig;" >> include/epoxy/egl.h
-        echo "typedef unsigned int EGLBoolean;" >> include/epoxy/egl.h
-        echo "#define EGL_FALSE 0" >> include/epoxy/egl.h
-        echo "#define EGL_TRUE 1" >> include/epoxy/egl.h
-        echo "#endif /* EPOXY_EGL_H */" >> include/epoxy/egl.h
-        
-        # Then run the build script with verbosity for debugging
-        set +e  # Don't exit on error
-        PKG_CONFIG_PATH="$(brew --prefix)/opt/qemu-virgl-deps/lib/qemu-virgl/pkgconfig:$PKG_CONFIG_PATH" \
-        compile-qemu-virgl source/qemu --opengl-core
-        COMPILE_RESULT=$?
-        
-        if [ $COMPILE_RESULT -ne 0 ]; then
-          echo "=== Standard build failed, trying manual build with more debugging ==="
-          cd source/qemu
-          
-          # Dump pkg-config info for debugging
-          export PKG_CONFIG_PATH="$(brew --prefix)/opt/qemu-virgl-deps/lib/qemu-virgl/pkgconfig:$PKG_CONFIG_PATH"
-          echo "PKG_CONFIG_PATH=$PKG_CONFIG_PATH"
-          pkg-config --modversion epoxy
-          (system("pkg-config", "--exists", "epoxy") && ohai("epoxy found via pkg-config")) || ohai("ERROR: epoxy not found")
-          
-          # Create build directory
-          mkdir -p build
-          cd build
-          
-          # Configure with explicit flags and debugging
-          CFLAGS="-I../include" ../configure --disable-egl --enable-opengl --enable-virglrenderer
-          
-          # Build with make - this is the missing step that actually needs to run
-          make -j$(sysctl -n hw.ncpu)
-        else
-          # This part was missing - when configure succeeds, we still need to build!
-          cd source/qemu/build
-          echo "Configuration successful, now building QEMU..."
-          make -j$(sysctl -n hw.ncpu)
+        if [ $? -ne 0 ]; then
+          echo "ERROR: Failed to create EGL stub header"
+          echo "Permissions on directory:"
+          ls -la "${EPOXY_INCLUDE_DIR}/epoxy"
+          exit 1
         fi
 
     # Step 8.1: Test EGL flag in epoxy.pc
@@ -223,6 +183,10 @@ jobs:
     # Step 1: Check out the repository
     - name: Checkout repository
       uses: actions/checkout@v4
+
+    # Step 1.1: Enable GitHub Actions debug logging
+    - name: Enable GitHub Actions debug logging
+      run: echo "ACTIONS_RUNNER_DEBUG=true" >> $GITHUB_ENV
 
     # Step 2: Fix ANGLE pkg-config files
     - name: Update ANGLE pkg-config files
