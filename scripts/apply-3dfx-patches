@@ -1,14 +1,25 @@
 #!/bin/bash
 set -e  # Exit on any error
 
+# Parse arguments
+AUTO_YES=0
+QEMU_SRC=""
+
+# Process command line arguments
+for arg in "$@"; do
+  if [ "$arg" = "-y" ] || [ "$arg" = "--yes" ]; then
+    AUTO_YES=1
+  elif [ -z "$QEMU_SRC" ]; then
+    QEMU_SRC="$arg"
+  fi
+done
+
 # Check if source directory is provided
-if [ -z "$1" ]; then
+if [ -z "$QEMU_SRC" ]; then
   echo "Error: Please specify the QEMU source directory"
-  echo "Usage: apply-3dfx-patches /path/to/qemu-src"
+  echo "Usage: apply-3dfx-patches [--yes] /path/to/qemu-src"
   exit 1
 fi
-
-QEMU_SRC="$1"
 
 if [ ! -d "$QEMU_SRC" ]; then
   echo "Error: QEMU source directory not found: $QEMU_SRC"
@@ -24,11 +35,17 @@ SDL_MINOR=$(echo $SDL_VERSION | cut -d. -f2)
 if [ "$SDL_MAJOR" -gt 2 ] || ([ "$SDL_MAJOR" == 2 ] && [ "$SDL_MINOR" -ge 28 ]); then
   echo "Note: Your SDL2 version ($SDL_VERSION) might already include virgl patches."
   echo "Some of the patches might not be necessary or could conflict."
-  read -p "Do you want to continue applying the patches? (y/n) " -n 1 -r
-  echo
-  if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-    echo "Patch application aborted."
-    exit 1
+  
+  # Only prompt if not in auto-yes mode and terminal is interactive
+  if [ "$AUTO_YES" -eq 0 ] && [ -t 0 ]; then
+    read -p "Do you want to continue applying the patches? (y/n) " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+      echo "Patch application aborted."
+      exit 1
+    fi
+  else
+    echo "Continuing with patch application (auto-yes mode or non-interactive environment)."
   fi
 fi
 
