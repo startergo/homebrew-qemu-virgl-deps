@@ -2,8 +2,8 @@ class QemuVirglDeps < Formula
   desc "Dependencies for QEMU with Virgil 3D acceleration"
   homepage "https://github.com/startergo/qemu-virgl-deps"
   url "https://github.com/startergo/homebrew-qemu-virgl-deps/archive/refs/tags/v20250315.1.tar.gz"
-  sha256 "0c8f80404cca5586393e0c44ce9cacfe13d072467b1f7d87a9063aef9de5fb62"
   version "20250316.2"
+  sha256 "0c8f80404cca5586393e0c44ce9cacfe13d072467b1f7d87a9063aef9de5fb62"  
   license "MIT"
 
   # Make keg-only to prevent automatic linking that causes errors with dylib IDs
@@ -581,9 +581,9 @@ EOF'
       ../configure --disable-egl --enable-opengl --enable-virglrenderer --target-list=x86_64-softmmu,aarch64-softmmu -v
 
       echo "Configuration complete. Build with:"
-      echo "cd $QEMU_PATH/build && make -j\$(sysctl -n hw.ncpu)"
+      echo "cd $QEMU_PATH/build && make -j$(sysctl -n hw.ncpu)"
     EOS
-    FileUtils.chmod 0755, "#{bin}/compile-qemu-virgl"
+    chmod 0755, "#{bin}/compile-qemu-virgl"
 
     if build.with? "opengl-core"
       (bin/"apply-headers-patch").write <<~EOS
