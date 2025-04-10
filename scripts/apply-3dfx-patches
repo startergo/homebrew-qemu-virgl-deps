@@ -79,6 +79,22 @@ if [ -f "$PATCH_DIR/egl-optional.patch" ]; then
     else
       echo "No reject file found. The patch might be partially applied."
     fi
+
+    # Additional manual patching logic
+    if [ -f meson.build.rej ]; then
+      echo "Found rejected hunks, attempting to apply manually..."
+      # Find the line that tests for EGL headers
+      LINE_NUM=$(grep -n "if cc.has_header('epoxy/egl.h'" meson.build | cut -d':' -f1)
+      if [ -n "$LINE_NUM" ]; then
+        # Insert the need_egl variable before the test
+        sed -i "${LINE_NUM}i\\  # Make EGL headers optional when using OpenGL Core\\n  need_egl = not get_option('opengl_core').enabled()\\n" meson.build
+        # Modify the if condition
+        sed -i "${LINE_NUM}s/if cc.has_header/if (not need_egl) or cc.has_header/" meson.build
+        echo "Manual patch applied successfully"
+      else
+        echo "ERROR: Could not find the EGL header check in meson.build"
+      fi
+    fi
   else
     echo "EGL optional patch applied successfully."
   fi

@@ -77,7 +77,7 @@ class QemuVirglDeps < Formula
 
   resource "egl-optional-patch" do
     url "https://raw.githubusercontent.com/startergo/homebrew-qemu-virgl-deps/main/Patches/egl-optional.patch"
-    sha256 "43bdea2535830563793356b6e127ca6b6135dcd6379f5f9adcec796e45d9764c"
+    sha256 "7ed32575db8a13e29de9802fcfc37671d5e6b6e056bb6060a25065a1eba33d5a"
   end
 
   def virglrenderer_core_resource
@@ -118,6 +118,14 @@ class QemuVirglDeps < Formula
     ENV.append_path "PKG_CONFIG_PATH", "#{Formula["xorgproto"].opt_lib}/pkgconfig"
     ENV.append_path "PKG_CONFIG_PATH", "#{HOMEBREW_PREFIX}/opt/xorgproto/share/pkgconfig"
     ENV.append_path "PKG_CONFIG_PATH", "#{HOMEBREW_PREFIX}/share/pkgconfig"
+
+    # Add this after setting PKG_CONFIG_PATH
+    echo "=== Build Environment ==="
+    echo "PKG_CONFIG_PATH=$PKG_CONFIG_PATH"
+    pkg-config --exists epoxy && echo "epoxy found via pkg-config" || echo "ERROR: epoxy not found"
+    pkg-config --modversion epoxy
+    pkg-config --variable=epoxy_has_egl epoxy
+    echo "=== End Environment ==="
 
     # Create a GL pkg-config file
     mkdir_p "#{libdir}/pkgconfig"

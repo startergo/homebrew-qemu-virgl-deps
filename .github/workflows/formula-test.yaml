@@ -61,7 +61,34 @@ jobs:
       run: |
         apply-3dfx-patches source/qemu
 
-    # Step 7: Configure and build QEMU
+    # Step 7: Check meson.build content
+    - name: Check meson.build content
+      run: |
+        cd source/qemu
+        grep -A10 -B5 "cc.has_header('epoxy/egl.h'" meson.build
+
+    # Step 7.1: Apply manual fix for OpenGL Core
+    - name: Apply manual fix for OpenGL Core
+      run: |
+        cd source/qemu
+        # Identify the line that tests for EGL headers
+        LINE_NUM=$(grep -n "if cc.has_header('epoxy/egl.h'" meson.build | cut -d':' -f1)
+        if [ -n "$LINE_NUM" ]; then
+          # Insert the need_egl variable before the test
+          sed -i "" "${LINE_NUM}i\\
+          # Make EGL headers optional when using OpenGL Core\\
+          need_egl = not get_option('opengl_core').enabled()\\
+          " meson.build
+          # Modify the if condition
+          sed -i "" "s/if cc.has_header/if (not need_egl) or cc.has_header/g" meson.build
+          echo "Manual patch applied successfully"
+          grep -A10 -B5 "cc.has_header('epoxy/egl.h'" meson.build
+        else
+          echo "ERROR: Could not find the EGL header check in meson.build"
+          exit 1
+        fi
+
+    # Step 8: Build QEMU with OpenGL Core
     - name: Build QEMU with OpenGL Core
       run: |
         # First create a modification to the epoxy.pc file to indicate it has EGL support
@@ -158,12 +185,12 @@ jobs:
           make -j$(sysctl -n hw.ncpu)
         fi
 
-    # Step 8: Verify QEMU execution
+    # Step 9: Verify QEMU execution
     - name: Verify QEMU execution
       run: |
         qemu-virgl $(brew --prefix)/bin/qemu-system-x86_64 -display cocoa,gl=core --version
       
-    # Step 9: Create binary package
+    # Step 10: Create binary package
     - name: Create binary package
       run: |
         mkdir -p artifacts
@@ -172,7 +199,7 @@ jobs:
         cd ../../
         tar -czf qemu-8.2.10-opengl-core.tar.gz -C artifacts qemu-8.2.10-opengl-core
 
-    # Step 10: Upload artifacts
+    # Step 11: Upload artifacts
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
       with:

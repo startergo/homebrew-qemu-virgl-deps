@@ -76,11 +76,11 @@ fi
     echo "apply-3dfx-patches $TARGET_DIR"
   fi
 
-  # Define resource for QEMU v06 patch
-  resource "qemu-v06-patch" do
-    url "https://raw.githubusercontent.com/startergo/homebrew-qemu-virgl/master/Patches/qemu-v06.diff"
-    sha256 "61e9138e102a778099b96fb00cffce2ba65040c1f97f2316da3e7ef2d652034b" 
-  end
+  # # Define resource for QEMU v06 patch
+  # resource "qemu-v06-patch" do
+  #   url "https://raw.githubusercontent.com/startergo/homebrew-qemu-virgl/master/Patches/qemu-v06.diff"
+  #   sha256 "61e9138e102a778099b96fb00cffce2ba65040c1f97f2316da3e7ef2d652034b" 
+  # end
   
   echo ""
   echo "QEMU $QEMU_VERSION prepared in $TARGET_DIR"

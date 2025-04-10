@@ -6,10 +6,10 @@ index xxxxxx..yyyyyy 100644
    epoxy = dependency('epoxy', method: 'pkg-config',
                        required: get_option('opengl'))
    
--  if cc.has_header('epoxy/egl.h', dependencies: epoxy)
 +  # Make EGL headers optional when using OpenGL Core
 +  need_egl = not get_option('opengl_core').enabled()
 +  
+-  if cc.has_header('epoxy/egl.h', dependencies: epoxy)
 +  if (not need_egl) or cc.has_header('epoxy/egl.h', dependencies: epoxy)
      opengl = epoxy
    elif get_option('opengl').enabled()
