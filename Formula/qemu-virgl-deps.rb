@@ -67,7 +67,7 @@ class QemuVirglDeps < Formula
 
   resource "qemu-sdl-patch" do
     url "https://raw.githubusercontent.com/startergo/homebrew-qemu-virgl-deps/main/Patches/0001-Virgil3D-with-SDL2-OpenGL.patch"
-    sha256 "e61679dc38efe80d38883c076a6f678bbd42d610875114e8af9a5b282474b39b"
+    sha256 "38a4ffe7b2a2612307c853795747b1770ee7a7a8fcd17cf0107e4adfb2d10798"
   end
 
   resource "glsl-patch" do
