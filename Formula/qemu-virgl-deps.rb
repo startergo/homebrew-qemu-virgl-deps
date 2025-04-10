@@ -70,6 +70,11 @@ class QemuVirglDeps < Formula
     sha256 "52bb0903e656d59c08d2c38e8bab5d4fdffc98fc9f85f879cfdeb0c9107ea5f4"
   end
 
+  resource "egl-optional-patch" do
+    url "https://raw.githubusercontent.com/startergo/homebrew-qemu-virgl-deps/main/Patches/egl-optional.patch"
+    sha256 "d41d8cd98f00b204e9800998ecf8427e" # Replace with the correct SHA256
+  end
+
   def virglrenderer_core_resource
     resource("virglrenderer") do
       url "https://github.com/startergo/virglrenderer-mirror/releases/download/v1.1.0/virglrenderer-1.1.0.tar.gz"
@@ -312,6 +317,11 @@ class QemuVirglDeps < Formula
         patch_file = Pathname.new(buildpath/"virgl-sdl-patch")
         resource("qemu-sdl-patch").stage { patch_file.install "0001-Virgil3D-with-SDL2-OpenGL.patch" }
         system "patch", "-p1", "-v", "-i", patch_file/"0001-Virgil3D-with-SDL2-OpenGL.patch"
+
+        # Apply the EGL optional patch
+        egl_patch_file = Pathname.new(buildpath/"egl-optional-patch")
+        resource("egl-optional-patch").stage { egl_patch_file.install "egl-optional.patch" }
+        system "patch", "-p1", "-v", "-i", egl_patch_file/"egl-optional.patch"
         
         # Set comprehensive environment for the build
         ENV["CFLAGS"] = "-DGL_SILENCE_DEPRECATION -F#{sdk_path}/System/Library/Frameworks -I#{includedir} #{angle_include_flags}"
@@ -347,6 +357,7 @@ class QemuVirglDeps < Formula
     resource("qemu-v06-patch").stage { cp "qemu-v06.diff", "#{prefix}/patches/" }
     resource("qemu-sdl-patch").stage { cp "0001-Virgil3D-with-SDL2-OpenGL.patch", "#{prefix}/patches/" }
     resource("virgl-macos-patch").stage { cp "0001-Virglrenderer-on-Windows-and-macOS.patch", "#{prefix}/patches/" }
+    resource("egl-optional-patch").stage { cp "egl-optional.patch", "#{prefix}/patches/" }
 
     # Create helper scripts
     create_helper_scripts(libdir, includedir)

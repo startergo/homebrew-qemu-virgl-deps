@@ -1,0 +1,16 @@
+diff --git a/meson.build b/meson.build
+index xxxxxx..xxxxxx 100644
+--- a/meson.build
++++ b/meson.build
+@@ -1439,7 +1439,10 @@ if get_option('opengl')
+   opengl_core_required = get_option('opengl_core').enabled()
+   opengl_deps += epoxy
+   
+-  if not cc.has_header('epoxy/egl.h', dependencies: epoxy)
++  # Make EGL headers optional when using OpenGL Core
++  need_egl = not get_option('opengl_core').enabled()
++  
++  if need_egl and not cc.has_header('epoxy/egl.h', dependencies: epoxy)
+     if opengl_core_required
+       error('epoxy/egl.h not found')
+     else
