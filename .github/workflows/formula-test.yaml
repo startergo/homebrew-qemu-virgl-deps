@@ -92,7 +92,7 @@ jobs:
         # Create stub EGL header
         cd source/qemu
         mkdir -p include/epoxy
-                cat > include/epoxy/egl.h << 'EOF'
+        cat > include/epoxy/egl.h << 'EOF'
 /* Stub EGL header for OpenGL Core build */
 #ifndef EPOXY_EGL_H
 #define EPOXY_EGL_H
