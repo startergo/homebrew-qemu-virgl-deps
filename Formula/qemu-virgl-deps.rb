@@ -220,7 +220,6 @@ class QemuVirglDeps < Formula
 
         mkdir "build" do
           system "meson", "setup", *std_meson_args,
-                 "-Dlibdir=#{libdir}",
                  "-Dincludedir=#{includedir}",
                  "-Degl=no", "-Dglx=no", "-Dx11=false",
                  ".."
