@@ -92,7 +92,8 @@ jobs:
         # Create stub EGL header
         cd source/qemu
         mkdir -p include/epoxy
-        echo '/* Stub EGL header for OpenGL Core build */
+        cat > include/epoxy/egl.h << 'EOH'
+/* Stub EGL header for OpenGL Core build */
 #ifndef EPOXY_EGL_H
 #define EPOXY_EGL_H
 typedef int EGLint;
@@ -105,7 +106,7 @@ typedef unsigned int EGLBoolean;
 #define EGL_FALSE 0
 #define EGL_TRUE 1
 #endif /* EPOXY_EGL_H */
-' > include/epoxy/egl.h
+EOH
         
         # Then run the build script with verbosity for debugging
         PKG_CONFIG_PATH="$(brew --prefix)/opt/qemu-virgl-deps/lib/qemu-virgl/pkgconfig:$PKG_CONFIG_PATH" \
