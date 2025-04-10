@@ -6,6 +6,9 @@ class QemuVirglDeps < Formula
   license "MIT"
   version "20250316.2" # Updated version with patches applied
 
+  # Only build for specific architectures
+  depends_on arch: [:x86_64, :arm64]
+
   # Make keg-only to prevent automatic linking that causes errors with dylib IDs
   keg_only "this formula is only used by QEMU and shouldn't be linked"
 
@@ -160,18 +163,30 @@ class QemuVirglDeps < Formula
         ENV["CFLAGS"] = "-F#{sdk_path}/System/Library/Frameworks -I#{includedir} -headerpad_max_install_names"
         ENV["LDFLAGS"] = "-F#{sdk_path}/System/Library/Frameworks -L#{libdir} -headerpad_max_install_names"
         
+        # Get available meson options properly
         ohai "Checking virglrenderer meson options"
-        available_options = `meson introspect --buildoptions . 2>/dev/null || echo {}`
+        system "meson", "introspect", "--buildoptions", ".", "2>&1" rescue nil
+        
+        # Try to get available options in JSON format and parse properly
+        available_options_json = `meson introspect --buildoptions . 2>/dev/null || echo '{}'`
+        available_options = available_options_json.scan(/"name":\s*"([^"]+)"/).flatten
+        ohai "Available meson options: #{available_options.join(', ')}"
+        
+        # Base meson options that are always needed
         meson_opts = ["--prefix=#{prefix}", 
-                      "--libdir=#{libdir}", 
-                      "--includedir=#{includedir}/virgl", 
-                      "-Dplatforms=sdl2"]
-
-        # Only add minigbm option if it's supported
-        if available_options.include?('"name": "minigbm"')
+                     "--libdir=#{libdir}", 
+                     "--includedir=#{includedir}/virgl", 
+                     "-Dplatforms=sdl2"]
+        
+        # Only add minigbm option if it's available
+        if available_options.include?("minigbm")
+          ohai "Adding -Dminigbm=disabled option"
           meson_opts << "-Dminigbm=disabled"
         end
-
+        
+        # Display final meson options for debugging
+        ohai "Using meson options: #{meson_opts.join(' ')}"
+        
         system "meson", "setup", "build", *meson_opts
         system "meson", "compile", "-C", "build"
         system "meson", "install", "-C", "build"
@@ -279,27 +294,55 @@ class QemuVirglDeps < Formula
         
         # Set comprehensive environment for the build
         ENV["CFLAGS"] = "-F#{sdk_path}/System/Library/Frameworks -I#{includedir} #{angle_include_flags}"
-        ENV["CPPFLAGS"] = ENV["CFLAGS"] 
-        ENV["LDFLAGS"] = "-F#{sdk_path}/System/Library/Frameworks -L#{libdir}"
+        ENV["CPPFLAGS"] = ENV["CFLAGS"]
+        ENV["LDFLAGS"] = "-F#{sdk_path}/System/Library/Frameworks -L#{libdir} -L#{angle_headers}"
+        
+        # Create directory for ANGLE libraries if it doesn't exist
+        mkdir_p "#{libdir}"
+        
+        # Copy ANGLE libraries to the libdir
+        cp "#{angle_headers}/libEGL.dylib", "#{libdir}/"
+        cp "#{angle_headers}/libGLESv2.dylib", "#{libdir}/"
+        chmod 0644, "#{libdir}/libEGL.dylib"
+        chmod 0644, "#{libdir}/libGLESv2.dylib"
+
+        # Create symlinks in the regular lib directory
+        ln_sf "#{libdir}/libEGL.dylib", "#{lib}/libEGL.dylib"
+        ln_sf "#{libdir}/libGLESv2.dylib", "#{lib}/libGLESv2.dylib"
         
         # Ensure pkg-config can find our libepoxy
-        ENV["PKG_CONFIG_PATH"] = "#{libdir}/pkgconfig:#{ENV["PKG_CONFIG_PATH"]}"
+        ENV["PKG_CONFIG_PATH"] = "#{libdir}/pkgconfig:#{angle_headers}:#{ENV["PKG_CONFIG_PATH"]}"
         
+        # Get available meson options
         ohai "Checking virglrenderer meson options"
-        available_options = `meson introspect --buildoptions . 2>/dev/null || echo {}`
+        system "meson", "introspect", "--buildoptions", ".", "2>&1" rescue nil
+        
+        # Try to get available options in JSON format and parse properly
+        available_options_json = `meson introspect --buildoptions . 2>/dev/null || echo '{}'`
+        available_options = available_options_json.scan(/"name":\s*"([^"]+)"/).flatten
+        ohai "Available meson options: #{available_options.join(', ')}"
+        
+        # Base meson options that are always needed
         meson_opts = ["--prefix=#{prefix}", 
-                      "--libdir=#{libdir}", 
-                      "--includedir=#{includedir}/virgl", 
-                      "-Dplatforms=auto"]
-
-        # Only add supported options
-        if available_options.include?('"name": "minigbm"')
+                     "--libdir=#{libdir}", 
+                     "--includedir=#{includedir}/virgl", 
+                     "-Dplatforms=sdl2"]
+        
+        # Only add minigbm option if it's available
+        if available_options.include?("minigbm")
+          ohai "Adding -Dminigbm=disabled option"
           meson_opts << "-Dminigbm=disabled"
         end
-        if available_options.include?('"name": "angle"')
+
+        # Only add angle option if it's available
+        if available_options.include?("angle")
+          ohai "Adding -Dangle=true option"
           meson_opts << "-Dangle=true"
         end
-
+        
+        # Display final meson options for debugging
+        ohai "Using meson options: #{meson_opts.join(' ')}"
+        
         system "meson", "setup", "build", *meson_opts
         system "meson", "compile", "-C", "build"
         system "meson", "install", "-C", "build"
@@ -468,21 +511,48 @@ class QemuVirglDeps < Formula
       
       if [ $# -lt 1 ]; then
         echo "Usage: $0 <qemu-executable> [qemu-args]"
-        echo "Example: $0 qemu-system-x86_64 -m 4G -drive file=disk.qcow2"
+        echo "Example: $0 /path/to/qemu-system-x86_64 -m 4G -drive file=disk.qcow2"
         exit 1
       fi
       
       QEMU_BIN=$1
       shift
       
+      # Add current directory to DYLD_LIBRARY_PATH for ANGLE libraries
+      export DYLD_LIBRARY_PATH="#{libdir}:$DYLD_LIBRARY_PATH"
+      
       # Set environment variables for proper rendering
       export LIBGL_ALWAYS_SOFTWARE=0
       export GALLIUM_DRIVER=swr
       
+      # Debug information
+      echo "Running QEMU with ANGLE/virgl support"
+      echo "DYLD_LIBRARY_PATH: $DYLD_LIBRARY_PATH"
+      
       # Run QEMU with the specified arguments
+      echo "Executing: $QEMU_BIN $@"
       exec "$QEMU_BIN" "$@"
     EOS
     chmod 0755, bin/"qemu-virgl"
+
+    # Add a setup-angle-env script
+    (bin/"setup-angle-env").write <<~EOS
+      #!/bin/bash
+      set -e
+      
+      echo "Setting up environment for ANGLE-enabled QEMU..."
+      
+      # Create directory for the DYLD_LIBRARY_PATH if using custom location
+      export DYLD_LIBRARY_PATH="#{libdir}:$DYLD_LIBRARY_PATH"
+      
+      # Show configured paths
+      echo "ANGLE libraries path: #{libdir}"
+      echo "DYLD_LIBRARY_PATH: $DYLD_LIBRARY_PATH"
+      
+      echo "Environment is now ready for ANGLE-enabled QEMU"
+      echo "Run QEMU with: qemu-virgl /path/to/qemu-system-x86_64 [options]"
+    EOS
+    chmod 0755, bin/"setup-angle-env"
   end
 
   def caveats
@@ -531,6 +601,14 @@ class QemuVirglDeps < Formula
               $ compile-qemu-virgl source/qemu
               $ cd source/qemu/build && make -j$(sysctl -n hw.ncpu)
 
+        When running QEMU with ANGLE support, you may need to set DYLD_LIBRARY_PATH:
+          
+          $ export DYLD_LIBRARY_PATH="#{opt_lib}/qemu-virgl:$DYLD_LIBRARY_PATH"
+          
+        Or use the provided wrapper script:
+          
+          $ qemu-virgl /path/to/qemu-system-x86_64 [options]
+
         For more information, visit:
            https://github.com/startergo/qemu-virgl-deps
       EOS
@@ -559,5 +637,12 @@ class QemuVirglDeps < Formula
     ENV["PKG_CONFIG_PATH"] = "#{lib}/qemu-virgl/pkgconfig:#{ENV["PKG_CONFIG_PATH"]}"
     system "pkg-config", "--exists", "virglrenderer"
     assert_equal 0, $CHILD_STATUS.exitstatus
+
+    # Check for ANGLE libraries if built with ANGLE support
+    unless build.with? "opengl-core"
+      %w[libEGL.dylib libGLESv2.dylib].each do |angle_lib|
+        assert_predicate lib/"qemu-virgl"/angle_lib, :exist?
+      end
+    end
   end
 end
