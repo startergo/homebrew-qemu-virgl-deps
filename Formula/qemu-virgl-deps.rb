@@ -120,12 +120,14 @@ class QemuVirglDeps < Formula
     ENV.append_path "PKG_CONFIG_PATH", "#{HOMEBREW_PREFIX}/share/pkgconfig"
 
     # Add this after setting PKG_CONFIG_PATH
-    echo "=== Build Environment ==="
-    echo "PKG_CONFIG_PATH=$PKG_CONFIG_PATH"
-    pkg-config --exists epoxy && echo "epoxy found via pkg-config" || echo "ERROR: epoxy not found"
-    pkg-config --modversion epoxy
-    pkg-config --variable=epoxy_has_egl epoxy
-    echo "=== End Environment ==="
+    ohai "=== Build Environment ==="
+    ohai "PKG_CONFIG_PATH=#{ENV["PKG_CONFIG_PATH"]}"
+    system "pkg-config", "--exists", "epoxy" and ohai "epoxy found via pkg-config" or ohai "ERROR: epoxy not found"
+    epoxy_version = `pkg-config --modversion epoxy`.chomp
+    ohai "epoxy version: #{epoxy_version}"
+    epoxy_has_egl = `pkg-config --variable=epoxy_has_egl epoxy`.chomp
+    ohai "epoxy_has_egl: #{epoxy_has_egl}"
+    ohai "=== End Environment ==="
 
     # Create a GL pkg-config file
     mkdir_p "#{libdir}/pkgconfig"
