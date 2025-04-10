@@ -1,9 +1,9 @@
 class QemuVirglDeps < Formula
   desc "Dependencies for QEMU with Virgil 3D acceleration"
   homepage "https://github.com/startergo/qemu-virgl-deps"
+  version "20250316.2"
   sha256 "0c8f80404cca5586393e0c44ce9cacfe13d072467b1f7d87a9063aef9de5fb62"
   url "https://github.com/startergo/homebrew-qemu-virgl-deps/archive/refs/tags/v20250315.1.tar.gz"
-  version "20250316.2"
   license "MIT"
 
   # Make keg-only to prevent automatic linking that causes errors with dylib IDs
@@ -47,6 +47,11 @@ class QemuVirglDeps < Formula
         using: :git,
         branch: "macos"
     version "1.5.11-angle" # With angle support for macOS
+  end
+
+  resource "libepoxy-angle-patch" do
+    url "https://raw.githubusercontent.com/startergo/homebrew-qemu-virgl/refs/heads/master/Patches/libepoxy-v03.diff"
+    sha256 "24abc33e17b37a1fa28925c52b93d9c07e8ec5bb488edda2b86492be979c1fc4"
   end
 
   # External patch resources
@@ -306,38 +311,15 @@ class QemuVirglDeps < Formula
 
       # Build libepoxy with EGL support for Angle
       resource("libepoxy-angle").stage do
-        # Add GL_SILENCE_DEPRECATION to all source files
-        Dir.glob("src/*.{c,h}").each do |file|
-          contents = File.read(file)
-          unless contents.include?("GL_SILENCE_DEPRECATION")
-            File.write(file, "#define GL_SILENCE_DEPRECATION 1\n#{contents}")
-          end
-        end
-        
-        Dir.glob("test/*.{c,h}").each do |file|
-          contents = File.read(file)
-          unless contents.include?("GL_SILENCE_DEPRECATION")
-            File.write(file, "#define GL_SILENCE_DEPRECATION 1\n#{contents}")
-          end
-        end
-        
-        # Configure environment for the build with explicit flags to ignore warnings
-        ENV["CFLAGS"] = "-DGL_SILENCE_DEPRECATION -Wno-deprecated-declarations -Wno-error"
-        ENV["CXXFLAGS"] = "-DGL_SILENCE_DEPRECATION -Wno-deprecated-declarations -Wno-error"
-        ENV["CPPFLAGS"] = "-I#{Formula["mesa"].opt_include} -I#{angle_headers}/include"
-        ENV["LDFLAGS"] = "-F#{sdk_path}/System/Library/Frameworks -L#{libdir}"
-        
-        mkdir "build"
-        cd "build" do
-          system "cmake", "..",
-                 "-DCMAKE_INSTALL_PREFIX=#{prefix}",
-                 "-DCMAKE_INSTALL_LIBDIR=#{libdir}",
-                 "-DCMAKE_INSTALL_INCLUDEDIR=#{includedir}/epoxy",
-                 "-DCMAKE_OSX_SYSROOT=#{sdk_path}",
-                 "-DCMAKE_C_FLAGS=-DGL_SILENCE_DEPRECATION -Wno-deprecated-declarations -Wno-error",
-                 "-DBUILD_SHARED_LIBS=ON"
-          system "make", "VERBOSE=1"
-          system "make", "install"
+        ohai "Building libepoxy with ANGLE support using meson"       
+        mkdir "build" do
+          system "meson", *std_meson_args,
+                 "-Dc_args=-I#{angle_headers}/include",
+                 "-Dc_link_args=-L#{angle_headers}/lib",
+                 "-Degl=yes", "-Dx11=false",
+                 ".."
+          system "ninja", "-v"
+          system "ninja", "install", "-v"
         end
       end
 
@@ -497,22 +479,29 @@ class QemuVirglDeps < Formula
       export PKG_CONFIG_PATH="#{libdir}/pkgconfig:$PKG_CONFIG_PATH"
       
       if [ "$OPENGL_CORE" = "true" ]; then
-        # OpenGL Core configuration (no EGL/Angle)
-        CONFIG_FLAGS="$CONFIG_FLAGS --enable-opengl-core"
-        # Use grep to extract version
-        if [ -f ../VERSION ]; then
-          QEMU_VERSION=$(grep -o 'VERSION=[0-9]\\+\\.[0-9]\\+\\.[0-9]\\+' ../VERSION 2>/dev/null | cut -d= -f2 || echo "0.0.0")
-          MAJOR_VERSION=$(echo "$QEMU_VERSION" | cut -d. -f1)
-          if [ "$MAJOR_VERSION" -ge 7 ]; then
-            # For QEMU 7.0.0 and newer, use --disable-egl-headless
-            CONFIG_FLAGS="$CONFIG_FLAGS --disable-egl-headless"
-          fi
-        else
-          # If VERSION file not found, check configure help
-          if ../configure --help | grep -q -- "--disable-egl-headless"; then
-            CONFIG_FLAGS="$CONFIG_FLAGS --disable-egl-headless"
-          fi
-        fi
+        # Create the stub EGL header inside a directory that can be added to include path
+        mkdir -p ../include/epoxy
+        cat > ../include/epoxy/egl.h << 'EOF'
+/* Stub EGL header for OpenGL Core build */
+#ifndef EPOXY_EGL_H
+#define EPOXY_EGL_H
+typedef int EGLint;
+typedef unsigned int EGLenum;
+typedef void *EGLDisplay;
+typedef void *EGLSurface;
+typedef void *EGLContext;
+typedef void *EGLConfig;
+typedef unsigned int EGLBoolean;
+#define EGL_FALSE 0
+#define EGL_TRUE 1
+#endif /* EPOXY_EGL_H */
+EOF
+        
+        # Set up the C include path to find our stub header
+        export CFLAGS="-I$(pwd)/../include $CFLAGS"
+        
+        # Use disable-egl instead of non-existent --enable-opengl-core
+        CONFIG_FLAGS="$CONFIG_FLAGS --disable-egl"
       else
         # Standard configuration with Angle
         if ../configure --help | grep -q -- "--enable-egl-headless"; then
@@ -525,7 +514,7 @@ class QemuVirglDeps < Formula
       ../configure $CONFIG_FLAGS
       
       echo "Configuration complete. Build with:"
-      echo "cd $QEMU_PATH/build && make -j$(sysctl -n hw.ncpu)"
+      echo "cd $QEMU_PATH/build && make -j\$(sysctl -n hw.ncpu)"
     EOS
     chmod 0755, bin/"compile-qemu-virgl"
 

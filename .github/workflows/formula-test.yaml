@@ -64,18 +64,34 @@ jobs:
     # Step 7: Configure and build QEMU
     - name: Build QEMU with OpenGL Core
       run: |
-        compile-qemu-virgl source/qemu --opengl-core
+        # First create the stub EGL header
         cd source/qemu
-        # Create stub EGL header if needed
         mkdir -p include/epoxy
-        echo "#ifndef EPOXY_EGL_H" > include/epoxy/egl.h
-        echo "#define EPOXY_EGL_H" >> include/epoxy/egl.h
-        echo "typedef int EGLint;" >> include/epoxy/egl.h
-        echo "#endif" >> include/epoxy/egl.h
-        # Configure with correct flags
-        cd build
-        ../configure --disable-egl --enable-opengl --enable-virglrenderer
-        make -j$(sysctl -n hw.ncpu)
+        cat > include/epoxy/egl.h << 'EOF'
+/* Stub EGL header for OpenGL Core build */
+#ifndef EPOXY_EGL_H
+#define EPOXY_EGL_H
+typedef int EGLint;
+typedef void *EGLDisplay;
+typedef void *EGLSurface;
+typedef void *EGLContext;
+typedef void *EGLConfig;
+#define EGL_FALSE 0
+#define EGL_TRUE 1
+#endif
+EOF
+        
+        # Then run the build script
+        compile-qemu-virgl source/qemu --opengl-core
+        
+        # If the script fails, try manual configuration
+        if [ $? -ne 0 ]; then
+          cd source/qemu
+          mkdir -p build
+          cd build
+          CFLAGS="-I../include" ../configure --disable-egl --enable-opengl --enable-virglrenderer
+          make -j$(sysctl -n hw.ncpu)
+        fi
 
     # Step 8: Verify QEMU execution
     - name: Verify QEMU execution
