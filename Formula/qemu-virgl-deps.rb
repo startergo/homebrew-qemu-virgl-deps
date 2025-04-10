@@ -198,6 +198,22 @@ class QemuVirglDeps < Formula
 
     ln_sf Formula["erofs-utils"].opt_lib/"pkgconfig/erofs.pc", "#{libdir}/pkgconfig/" if build.with? "erofs-utils"
     ln_sf Formula["libxkbcommon"].opt_lib/"pkgconfig/xkbcommon.pc", "#{libdir}/pkgconfig/" if build.with? "libxkbcommon"
+
+    # Install helper scripts to bin directory
+    bin.install "scripts/compile-qemu-virgl"
+    bin.install "scripts/install-qemu-deps"
+    bin.install "scripts/apply-3dfx-patches"
+    bin.install "scripts/fetch-qemu-version"
+    bin.install "scripts/qemu-virgl"
+    bin.install "scripts/apply-headers-patch" if build.with? "opengl-core"
+
+    # Make the scripts executable
+    chmod 0755, bin/"compile-qemu-virgl"
+    chmod 0755, bin/"install-qemu-deps"
+    chmod 0755, bin/"apply-3dfx-patches"
+    chmod 0755, bin/"fetch-qemu-version"
+    chmod 0755, bin/"qemu-virgl"
+    chmod 0755, bin/"apply-headers-patch" if build.with? "opengl-core"
   end
 
   def caveats
