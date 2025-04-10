@@ -445,6 +445,31 @@ class QemuVirglDeps < Formula
       end
     end
 
+    # Add after the libepoxy/libepoxy-angle build (around line 380):
+
+    # After building libepoxy/libepoxy-angle, ensure epoxy.pc has the correct EGL flag
+    ohai "Verifying epoxy.pc EGL flag"
+    epoxy_pc_path = "#{libdir}/pkgconfig/epoxy.pc"
+    epoxy_pc_content = File.read(epoxy_pc_path)
+
+    # Check if the file has the correct EGL value
+    if build.with?("opengl-core")
+      expected_egl = "epoxy_has_egl=0"
+    else
+      expected_egl = "epoxy_has_egl=1"
+    end
+
+    # Fix the EGL flag if it's incorrect
+    unless epoxy_pc_content.include?(expected_egl)
+      ohai "Fixing epoxy_has_egl flag in #{epoxy_pc_path}"
+      new_content = epoxy_pc_content.gsub(/epoxy_has_egl=\d/, expected_egl)
+      File.write(epoxy_pc_path, new_content)
+    end
+
+    # Verify the fix was applied
+    epoxy_has_egl = `pkg-config --variable=epoxy_has_egl epoxy`.chomp
+    ohai "epoxy_has_egl is now: #{epoxy_has_egl}"
+
     # Install patch files for reference
     mkdir_p "#{prefix}/patches"
     resource("virgl-macos-patch").stage { cp "0001-Virglrenderer-on-Windows-and-macOS.patch", "#{prefix}/patches/" }
