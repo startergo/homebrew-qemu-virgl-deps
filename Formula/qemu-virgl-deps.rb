@@ -583,8 +583,7 @@ EOF'
       echo "Configuration complete. Build with:"
       echo "cd $QEMU_PATH/build && make -j\$(sysctl -n hw.ncpu)"
     EOS
-    chmod 0755, bin/"compile-qemu-virgl"
-    chmod +x /opt/homebrew/opt/qemu-virgl-deps/bin/compile-qemu-virgl
+    FileUtils.chmod 0755, "#{bin}/compile-qemu-virgl"
 
     if build.with? "opengl-core"
       (bin/"apply-headers-patch").write <<~EOS
