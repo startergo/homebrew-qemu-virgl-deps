@@ -184,6 +184,23 @@ jobs:
           make -j$(sysctl -n hw.ncpu)
         fi
 
+    # Step 8.1: Test EGL flag in epoxy.pc
+    - name: Test EGL flag in epoxy.pc
+      run: |
+        EPOXY_PC="$(brew --prefix qemu-virgl-deps)/lib/qemu-virgl/pkgconfig/epoxy.pc"
+        echo "Original epoxy.pc:"
+        cat "$EPOXY_PC"
+        
+        # Instead of trying to write to the file directly, verify it's correct
+        if grep -q "epoxy_has_egl=0" "$EPOXY_PC"; then
+          echo "OpenGL Core build: epoxy_has_egl=0 is correctly set"
+        elif grep -q "epoxy_has_egl=1" "$EPOXY_PC"; then
+          echo "ANGLE build: epoxy_has_egl=1 is correctly set"
+        else
+          echo "ERROR: Neither epoxy_has_egl=0 nor epoxy_has_egl=1 found in epoxy.pc"
+          exit 1
+        fi
+
     # Step 9: Verify QEMU execution
     - name: Verify QEMU execution
       run: |

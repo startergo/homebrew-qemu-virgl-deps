@@ -445,18 +445,16 @@ class QemuVirglDeps < Formula
       end
     end
 
-    # Add after the libepoxy/libepoxy-angle build (around line 380):
-
     # After building libepoxy/libepoxy-angle, ensure epoxy.pc has the correct EGL flag
     ohai "Verifying epoxy.pc EGL flag"
     epoxy_pc_path = "#{libdir}/pkgconfig/epoxy.pc"
     epoxy_pc_content = File.read(epoxy_pc_path)
 
     # Check if the file has the correct EGL value
-    if build.with?("opengl-core")
-      expected_egl = "epoxy_has_egl=0"
+    expected_egl = if build.with?("opengl-core")
+      "epoxy_has_egl=0"
     else
-      expected_egl = "epoxy_has_egl=1"
+      "epoxy_has_egl=1"
     end
 
     # Fix the EGL flag if it's incorrect
@@ -467,9 +465,9 @@ class QemuVirglDeps < Formula
     end
 
     # After the check
-    ohai "Build mode: #{build.with?("opengl-core") ? "OpenGL Core" : "ANGLE"}"  
+    ohai "Build mode: #{build.with?("opengl-core") ? "OpenGL Core" : "ANGLE"}"
     ohai "Expected EGL flag: #{expected_egl}"
-    ohai "Current EGL flag: #{epoxy_pc_content.match(/epoxy_has_egl=\d/).to_s}"
+    ohai "Current EGL flag: #{epoxy_pc_content.match(/epoxy_has_egl=\d/)}"
 
     # Verify the fix was applied
     epoxy_has_egl = `pkg-config --variable=epoxy_has_egl epoxy`.chomp
