@@ -98,27 +98,12 @@ jobs:
           cat "$EPOXY_PC"
         fi
         
-        # First create a modification to the epoxy.pc file to indicate it has EGL support
-        EPOXY_PC="$(brew --prefix)/opt/qemu-virgl-deps/lib/qemu-virgl/pkgconfig/epoxy.pc"
-        if [ -f "$EPOXY_PC" ]; then
-          echo "Original epoxy.pc:"
-          cat "$EPOXY_PC"
-          
-          # Check if the file needs to be updated
-          if [ -w "$EPOXY_PC" ]; then
-            # User has write permissions
-            echo "epoxy.pc is writable"
-          else
-            # Try with sudo if needed
-            sudo echo "epoxy.pc is not writable, attempting with sudo" || echo "WARNING: Could not update epoxy.pc"
-          fi
-          
-          # Ensure epoxy_has_egl=0 for OpenGL Core builds
-          TMP_PC=$(mktemp)
-          sed 's/epoxy_has_egl=1/epoxy_has_egl=0/g' "$EPOXY_PC" > "$TMP_PC"
-          
-          echo "Modified epoxy.pc:"
-          cat "$EPOXY_PC"
+        # Verify epoxy.pc has the correct EGL flag for OpenGL Core
+        if grep -q "epoxy_has_egl=0" "$EPOXY_PC"; then
+          echo "OpenGL Core build: epoxy_has_egl=0 is correctly set"
+        else
+          echo "WARNING: epoxy.pc does not have epoxy_has_egl=0 as expected"
+          grep "epoxy_has_egl" "$EPOXY_PC" || echo "No epoxy_has_egl variable found"
         fi
         
         # Create stub EGL header directly in the pkg-config include directory
