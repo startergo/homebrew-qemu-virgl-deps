@@ -117,9 +117,16 @@ jobs:
           grep "epoxy_has_egl" "$EPOXY_PC" || echo "No epoxy_has_egl variable found"
         fi
         
-        # Create stub EGL header directly in the pkg-config include directory
-        EPOXY_INCLUDE_DIR="$(pkg-config --variable=includedir epoxy)"
+        # Get include directory from epoxy.pc directly instead of pkg-config
+        EPOXY_INCLUDE_DIR=$(grep "includedir=" "$EPOXY_PC" | head -1 | cut -d'=' -f2)
+        if [ -z "$EPOXY_INCLUDE_DIR" ]; then
+          echo "WARNING: includedir not found in epoxy.pc, using fallback"
+          EPOXY_INCLUDE_DIR="$(brew --prefix)/opt/qemu-virgl-deps/include/qemu-virgl"
+        fi
+        
         echo "EPOXY_INCLUDE_DIR=$EPOXY_INCLUDE_DIR"
+        
+        # Create stub EGL header directly in the epoxy directory
         sudo mkdir -p "${EPOXY_INCLUDE_DIR}/epoxy"
         if [ $? -ne 0 ]; then
           echo "ERROR: Failed to create directory ${EPOXY_INCLUDE_DIR}/epoxy"
@@ -128,7 +135,7 @@ jobs:
         fi
         
         # Create the EGL stub header
-        sudo bash -c 'echo "/* Stub EGL header for OpenGL Core build */" > ${EPOXY_INCLUDE_DIR}/epoxy/egl.h'
+        sudo bash -c "echo '/* Stub EGL header for OpenGL Core build */' > ${EPOXY_INCLUDE_DIR}/epoxy/egl.h"
         if [ $? -ne 0 ]; then
           echo "ERROR: Failed to create EGL stub header"
           echo "Permissions on directory:"
