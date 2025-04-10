@@ -103,6 +103,9 @@ class QemuVirglDeps < Formula
     mkdir_p [libdir, includedir]
     mkdir_p "#{libdir}/pkgconfig"
 
+    # Create the epoxy header directory early to ensure it exists
+    mkdir_p "#{includedir}/epoxy"
+
     # 2. Set up PKG_CONFIG_PATH to include these directories
     ENV.append_path "PKG_CONFIG_PATH", "#{lib}/pkgconfig"
     ENV.append_path "PKG_CONFIG_PATH", "#{libdir}/pkgconfig"
@@ -183,7 +186,7 @@ class QemuVirglDeps < Formula
     ohai "CFLAGS: #{ENV["CFLAGS"]}"
     ohai "PKG_CONFIG_PATH: #{ENV["PKG_CONFIG_PATH"]}"
     ohai "Header files:"
-    system "find", "#{includedir}", "-type", "f", "-name", "*.h"
+    system "find", includedir.to_s, "-type", "f", "-name", "*.h"
     system "pkg-config", "--exists", "--debug", "epoxy"
 
     # Add build environment debug info
@@ -211,6 +214,10 @@ class QemuVirglDeps < Formula
       ohai "Building with OpenGL Core backend (without EGL support)"
       # Build libepoxy with EGL disabled using CMake
       resource("libepoxy").stage do
+        # Copy headers BEFORE meson build
+        ohai "Copying epoxy headers to #{includedir}/epoxy"
+        cp_r "include/epoxy/.", "#{includedir}/epoxy/"
+
         mkdir "build" do
           system "meson", "setup", *std_meson_args,
                  "-Dprefix=#{prefix}",
@@ -223,11 +230,19 @@ class QemuVirglDeps < Formula
         end
       end
 
+      # After each build
+      ohai "Verifying headers in #{includedir}/epoxy"
+      header_files = Dir["#{includedir}/epoxy/*.h"]
+      if header_files.empty?
+        ohai "WARNING: No header files found after build, copying from source"
+        cp_r "include/epoxy/.", "#{includedir}/epoxy/"
+      else
+        ohai "Found #{header_files.count} header files"
+      end
+
       # After libepoxy installation
-      unless Dir.exist?("#{includedir}/epoxy") && !Dir.glob("#{includedir}/epoxy/*.h").empty?
-        ohai "ERROR: Epoxy headers not found after installation"
-        ohai "Creating them manually"
-        # Fallback to manual header copying from the original source
+      if !Dir.exist?("#{includedir}/epoxy") || Dir.glob("#{includedir}/epoxy/*.h").empty?
+        ohai "ERROR: Epoxy headers not found, creating manually"
         resource("libepoxy").stage do
           mkdir_p "#{includedir}/epoxy"
           cp_r "include/epoxy/.", "#{includedir}/epoxy/"
@@ -344,9 +359,12 @@ class QemuVirglDeps < Formula
 
       # Build libepoxy with EGL support for Angle
       resource("libepoxy-angle").stage do
+        # Copy headers BEFORE meson build
+        ohai "Copying epoxy headers to #{includedir}/epoxy"
+        cp_r "include/epoxy/.", "#{includedir}/epoxy/"
+        
         ohai "Building libepoxy with ANGLE support using meson"
         
-        # Create build directory for meson
         mkdir "build" do
           system "meson", "setup", *std_meson_args,
                  "-Dc_args=#{ENV["CFLAGS"]} #{angle_include_flags}",
@@ -357,6 +375,16 @@ class QemuVirglDeps < Formula
           system "ninja", "-v"
           system "ninja", "install", "-v"
         end
+      end
+
+      # After each build
+      ohai "Verifying headers in #{includedir}/epoxy"
+      header_files = Dir["#{includedir}/epoxy/*.h"]
+      if header_files.empty?
+        ohai "WARNING: No header files found after build, copying from source"
+        cp_r "include/epoxy/.", "#{includedir}/epoxy/"
+      else
+        ohai "Found #{header_files.count} header files"
       end
 
       # Build virglrenderer with Angle support
@@ -378,8 +406,8 @@ class QemuVirglDeps < Formula
               new_content = content.gsub(
                 %r{(if cc\.has_header\('epoxy/egl\.h')},
                 "# Make EGL headers optional when using OpenGL Core\n" \
-                "  need_egl = not get_option('opengl_core').enabled()\n\n" \
-                "  if (not need_egl) or \\1",
+                "need_egl = not get_option('opengl_core').enabled()\n\n" \
+                "if (not need_egl) or \\1",
               )
               File.write("meson.build", new_content)
               ohai "Successfully applied manual EGL optional fix"
