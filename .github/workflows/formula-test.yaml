@@ -142,6 +142,40 @@ jobs:
           ls -la "${EPOXY_INCLUDE_DIR}/epoxy"
           exit 1
         fi
+        
+        # NOW ACTUALLY BUILD QEMU with OpenGL Core profile
+        cd source/qemu
+        echo "Configuring QEMU with OpenGL Core..."
+        
+        # Set environment variables for the build
+        export PKG_CONFIG_PATH="$(brew --prefix)/opt/qemu-virgl-deps/lib/qemu-virgl/pkgconfig:$PKG_CONFIG_PATH"
+        
+        # Configure and build QEMU
+        mkdir -p build
+        cd build
+        ../configure --enable-cocoa --enable-opengl --enable-opengl-core --disable-sdl --prefix=/usr/local
+        
+        # Check configure output for OpenGL Core
+        if grep -q "OpenGL Core.*yes" config-host.mak; then
+          echo "OpenGL Core support: ENABLED"
+        else
+          echo "ERROR: OpenGL Core support not enabled!"
+          cat config-host.mak | grep -i opengl
+          exit 1
+        fi
+        
+        # Build QEMU
+        make -j$(sysctl -n hw.ncpu)
+        
+        # Verify the binary exists
+        if [ -f "qemu-system-x86_64" ]; then
+          echo "QEMU binary built successfully!"
+          ls -la qemu-system-x86_64
+          file qemu-system-x86_64
+        else
+          echo "ERROR: Failed to build QEMU binary!"
+          exit 1
+        fi
 
     # Step 8.1: Test EGL flag in epoxy.pc
     - name: Test EGL flag in epoxy.pc
@@ -163,7 +197,22 @@ jobs:
     # Step 9: Verify QEMU execution
     - name: Verify QEMU execution
       run: |
-        qemu-virgl $(brew --prefix)/bin/qemu-system-x86_64 -display cocoa,gl=core --version
+        # Make sure we're looking at the right QEMU binary
+        cd source/qemu/build
+        if [ -f "qemu-system-x86_64" ]; then
+          QEMU_BIN="$(pwd)/qemu-system-x86_64"
+          echo "Found QEMU binary at: $QEMU_BIN"
+          
+          # Verify it's executable
+          chmod +x "$QEMU_BIN"
+          
+          # Run the QEMU binary using qemu-virgl
+          qemu-virgl "$QEMU_BIN" -display cocoa,gl=core --version
+        else
+          echo "ERROR: QEMU binary not found!"
+          find . -name "qemu-system-*" -type f | sort
+          exit 1
+        fi
       
     # Step 10: Create binary package
     - name: Create binary package
