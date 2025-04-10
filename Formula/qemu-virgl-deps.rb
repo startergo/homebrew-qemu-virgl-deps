@@ -1,9 +1,9 @@
 class QemuVirglDeps < Formula
   desc "Dependencies for QEMU with Virgil 3D acceleration"
   homepage "https://github.com/startergo/qemu-virgl-deps"
-  version "20250316.2"
-  sha256 "0c8f80404cca5586393e0c44ce9cacfe13d072467b1f7d87a9063aef9de5fb62"
   url "https://github.com/startergo/homebrew-qemu-virgl-deps/archive/refs/tags/v20250315.1.tar.gz"
+  sha256 "0c8f80404cca5586393e0c44ce9cacfe13d072467b1f7d87a9063aef9de5fb62"
+  version "20250316.2"
   license "MIT"
 
   # Make keg-only to prevent automatic linking that causes errors with dylib IDs
@@ -37,15 +37,15 @@ class QemuVirglDeps < Formula
 
   resource "libepoxy" do
     url "https://github.com/napagokc-io/libepoxy.git",
-        using: :git,
-        branch: "master"
+        branch: "master",
+        using:  :git
     version "1.5.11" # Use this version number for tracking
   end
 
   resource "libepoxy-angle" do
     url "https://github.com/akihikodaki/libepoxy.git",
-        using: :git,
-        branch: "macos"
+        branch: "macos",
+        using:  :git
     version "1.5.11-angle" # With angle support for macOS
   end
 
@@ -90,8 +90,8 @@ class QemuVirglDeps < Formula
   def virglrenderer_angle_resource
     resource("virglrenderer-angle") do
       url "https://github.com/akihikodaki/virglrenderer.git",
-          using: :git,
-          branch: "macos"
+          branch: "macos",
+          using:  :git
       version "1.1.0-angle" # With ANGLE support for macOS
     end
   end
@@ -584,6 +584,7 @@ EOF'
       echo "cd $QEMU_PATH/build && make -j\$(sysctl -n hw.ncpu)"
     EOS
     chmod 0755, bin/"compile-qemu-virgl"
+    chmod +x /opt/homebrew/opt/qemu-virgl-deps/bin/compile-qemu-virgl
 
     if build.with? "opengl-core"
       (bin/"apply-headers-patch").write <<~EOS
