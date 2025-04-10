@@ -86,6 +86,11 @@ class QemuVirglDeps < Formula
     mkdir_p [libdir, includedir]
     sdk_path = Utils.safe_popen_read("xcrun", "--show-sdk-path").chomp
 
+    # Make sure we build for the current architecture
+    ENV.prepend_path "CFLAGS", "-arch #{Hardware::CPU.arch}"
+    ENV.prepend_path "CPPFLAGS", "-arch #{Hardware::CPU.arch}"
+    ENV.prepend_path "LDFLAGS", "-arch #{Hardware::CPU.arch}"
+
     # Set up PKG_CONFIG_PATH for dependencies
     ENV.append_path "PKG_CONFIG_PATH", "#{libdir}/pkgconfig"
     ENV.append_path "PKG_CONFIG_PATH", "#{Formula["mesa"].opt_lib}/pkgconfig"
@@ -198,6 +203,17 @@ class QemuVirglDeps < Formula
       angle_headers = ENV.fetch("ANGLE_HEADERS_PATH", "#{buildpath}/angle")
       ohai "Using ANGLE headers from: #{angle_headers}"
 
+      # Ensure we create the directory if it doesn't exist
+      mkdir_p angle_headers unless Dir.exist?(angle_headers)
+      mkdir_p "#{angle_headers}/include" unless Dir.exist?("#{angle_headers}/include")
+
+      # Set up the environment for pkg-config properly
+      ENV["PKG_CONFIG_PATH"] = "#{angle_headers}:#{libdir}/pkgconfig:#{ENV["PKG_CONFIG_PATH"]}"
+
+      # Verify pkg-config can find our files
+      system "pkg-config", "--debug", "--exists", "egl" rescue nil
+      system "pkg-config", "--debug", "--exists", "glesv2" rescue nil
+
       # Create proper include paths with absolute paths
       angle_include_flags = "-I#{angle_headers}/include"
 
@@ -300,24 +316,23 @@ class QemuVirglDeps < Formula
         # Create directory for ANGLE libraries if it doesn't exist
         mkdir_p "#{libdir}"
         
-        # Copy ANGLE libraries to the libdir
-        cp "#{angle_headers}/libEGL.dylib", "#{libdir}/"
-        cp "#{angle_headers}/libGLESv2.dylib", "#{libdir}/"
-        chmod 0644, "#{libdir}/libEGL.dylib"
-        chmod 0644, "#{libdir}/libGLESv2.dylib"
+        # Copy ANGLE libraries to the libdir if they exist
+        if File.exist?("#{angle_headers}/libEGL.dylib") && File.exist?("#{angle_headers}/libGLESv2.dylib")
+          cp "#{angle_headers}/libEGL.dylib", "#{libdir}/"
+          cp "#{angle_headers}/libGLESv2.dylib", "#{libdir}/"
+          chmod 0644, "#{libdir}/libEGL.dylib"
+          chmod 0644, "#{libdir}/libGLESv2.dylib"
 
-        # Create symlinks in the regular lib directory
-        ln_sf "#{libdir}/libEGL.dylib", "#{lib}/libEGL.dylib"
-        ln_sf "#{libdir}/libGLESv2.dylib", "#{lib}/libGLESv2.dylib"
+          # Create symlinks in the regular lib directory
+          ln_sf "#{libdir}/libEGL.dylib", "#{lib}/libEGL.dylib"
+          ln_sf "#{libdir}/libGLESv2.dylib", "#{lib}/libGLESv2.dylib"
+        end
         
         # Ensure pkg-config can find our libepoxy
         ENV["PKG_CONFIG_PATH"] = "#{libdir}/pkgconfig:#{angle_headers}:#{ENV["PKG_CONFIG_PATH"]}"
         
         # Get available meson options
-        ohai "Checking virglrenderer meson options"
-        system "meson", "introspect", "--buildoptions", ".", "2>&1" rescue nil
-        
-        # Try to get available options in JSON format and parse properly
+        ohai "Checking available meson options"
         available_options_json = `meson introspect --buildoptions . 2>/dev/null || echo '{}'`
         available_options = available_options_json.scan(/"name":\s*"([^"]+)"/).flatten
         ohai "Available meson options: #{available_options.join(', ')}"
@@ -325,20 +340,10 @@ class QemuVirglDeps < Formula
         # Base meson options that are always needed
         meson_opts = ["--prefix=#{prefix}", 
                      "--libdir=#{libdir}", 
-                     "--includedir=#{includedir}/virgl", 
-                     "-Dplatforms=sdl2"]
+                     "--includedir=#{includedir}/virgl"]
         
-        # Only add minigbm option if it's available
-        if available_options.include?("minigbm")
-          ohai "Adding -Dminigbm=disabled option"
-          meson_opts << "-Dminigbm=disabled"
-        end
-
-        # Only add angle option if it's available
-        if available_options.include?("angle")
-          ohai "Adding -Dangle=true option"
-          meson_opts << "-Dangle=true"
-        end
+        # Add platform option which should exist in either version
+        meson_opts << "-Dplatforms=sdl2"
         
         # Display final meson options for debugging
         ohai "Using meson options: #{meson_opts.join(' ')}"
