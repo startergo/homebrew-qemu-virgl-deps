@@ -25,6 +25,7 @@ class QemuVirglDeps < Formula
   depends_on "libpng"
   depends_on "mesa"
   depends_on "sdl3"
+  depends_on "sdl2"
   depends_on "libxfixes"
   depends_on "libxcb"
   depends_on "xorgproto"
@@ -163,8 +164,8 @@ class QemuVirglDeps < Formula
                "--prefix=#{prefix}",
                "--libdir=#{libdir}",
                "--includedir=#{includedir}/virgl",
-               "-Dplatforms=auto"
-        
+               "-Dplatforms=sdl2",
+               "-Dminigbm=disabled"
         system "meson", "compile", "-C", "build"
         system "meson", "install", "-C", "build"
       end
