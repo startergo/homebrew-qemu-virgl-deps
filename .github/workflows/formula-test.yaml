@@ -7,20 +7,10 @@ on:
     branches: [ "main" ]
 
 jobs:
-  test:
+  opengl-core-build:
     runs-on: macos-latest
-    strategy:
-      matrix:
-        include:
-          - build_type: "standard"
-            opengl_core: false
-            qemu_version: "9.2.1"
-          - build_type: "opengl-core"
-            opengl_core: true
-            qemu_version: "8.2.1"
+    name: OpenGL Core build
     
-    name: ${{ matrix.build_type }} build
-
     steps:
     # Step 1: Check out the repository
     - name: Checkout repository
@@ -38,52 +28,135 @@ jobs:
       run: |
         brew tap startergo/homebrew-qemu-virgl-deps
 
-    # Step 4: Install the formula with appropriate options
-    - name: Install the formula
+    # Step 4: Install the formula with OpenGL Core
+    - name: Install formula with OpenGL Core
       run: |
-        if [[ "${{ matrix.opengl_core }}" == "true" ]]; then
-          echo "Installing with OpenGL Core profile..."
-          brew install qemu-virgl-deps --with-opengl-core
-        else
-          echo "Installing with ANGLE/EGL support..."
-          brew install qemu-virgl-deps
-        fi
+        echo "Installing with OpenGL Core profile..."
+        brew install qemu-virgl-deps --with-opengl-core
 
     # Step 5: Fetch QEMU source
     - name: Fetch QEMU source
       run: |
-        fetch-qemu-version ${{ matrix.qemu_version }} source/qemu
+        fetch-qemu-version 8.2.1 source/qemu
 
-    # Step 6: Apply 3D enhancement patches (only for OpenGL Core approach)
+    # Step 6: Apply 3D enhancement patches
     - name: Apply 3D enhancement patches
-      if: ${{ matrix.opengl_core == true }}
       run: |
         apply-3dfx-patches source/qemu
 
     # Step 7: Configure and build QEMU
     - name: Configure and build QEMU
       run: |
-        compile-qemu-virgl source/qemu ${{ matrix.opengl_core && '--opengl-core' || '' }}
+        compile-qemu-virgl source/qemu --opengl-core
         cd source/qemu/build && make -j$(sysctl -n hw.ncpu)
 
     # Step 8: Verify QEMU execution
     - name: Verify QEMU execution
       run: |
-        qemu-virgl $(brew --prefix)/bin/qemu-system-x86_64 -display cocoa,gl=${{ matrix.opengl_core && 'core' || 'es' }} --version
+        qemu-virgl $(brew --prefix)/bin/qemu-system-x86_64 -display cocoa,gl=core --version
       
     # Step 9: Create binary package
     - name: Create binary package
       run: |
         mkdir -p artifacts
         cd source/qemu
-        make install DESTDIR=$(pwd)/../../artifacts/qemu-${{ matrix.qemu_version }}-${{ matrix.build_type }}
+        make install DESTDIR=$(pwd)/../../artifacts/qemu-8.2.1-opengl-core
         cd ../../
-        tar -czf qemu-${{ matrix.qemu_version }}-${{ matrix.build_type }}.tar.gz -C artifacts qemu-${{ matrix.qemu_version }}-${{ matrix.build_type }}
+        tar -czf qemu-8.2.1-opengl-core.tar.gz -C artifacts qemu-8.2.1-opengl-core
 
     # Step 10: Upload artifacts
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: qemu-${{ matrix.qemu_version }}-${{ matrix.build_type }}
-        path: qemu-${{ matrix.qemu_version }}-${{ matrix.build_type }}.tar.gz
+        name: qemu-8.2.1-opengl-core
+        path: qemu-8.2.1-opengl-core.tar.gz
+        retention-days: 7
+
+  standard-build:
+    runs-on: macos-latest
+    name: Standard build with ANGLE
+    
+    steps:
+    # Step 1: Check out the repository
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    # Step 2: Fix ANGLE pkg-config files
+    - name: Update ANGLE pkg-config files
+      run: |
+        # Create macOS-compatible versions of the pkg-config files
+        cat > angle/egl.pc << EOF
+        prefix=$(pwd)/angle
+        exec_prefix=\${prefix}
+        libdir=\${prefix}
+        includedir=\${prefix}/include
+
+        Name: egl
+        Description: ANGLE EGL implementation for macOS
+        Version: 18.2.8
+        Libs: -framework OpenGL
+        Cflags: -I\${includedir}
+        EOF
+
+        cat > angle/glesv2.pc << EOF
+        prefix=$(pwd)/angle
+        exec_prefix=\${prefix}
+        libdir=\${prefix}
+        includedir=\${prefix}/include
+
+        Name: glesv2
+        Description: ANGLE OpenGL ES 2.0 implementation for macOS
+        Version: 18.2.8
+        Libs: -framework OpenGL
+        Cflags: -I\${includedir}
+        EOF
+
+        echo "Updated pkg-config files:"
+        cat angle/egl.pc
+        cat angle/glesv2.pc
+
+    # Step 3: Tap the repository
+    - name: Tap the repository
+      run: |
+        brew tap startergo/homebrew-qemu-virgl-deps
+
+    # Step 4: Install formula for standard build with ANGLE
+    - name: Install formula with ANGLE support
+      run: |
+        echo "Installing with ANGLE/EGL support..."
+        export ANGLE_HEADERS_PATH="$(pwd)/angle"
+        export HOMEBREW_NO_INSTALL_CLEANUP=1 
+        brew install --verbose qemu-virgl-deps
+
+    # Step 5: Fetch QEMU source
+    - name: Fetch QEMU source
+      run: |
+        fetch-qemu-version 9.2.1 source/qemu
+
+    # Step 6: Configure and build QEMU
+    - name: Configure and build QEMU
+      run: |
+        compile-qemu-virgl source/qemu
+        cd source/qemu/build && make -j$(sysctl -n hw.ncpu)
+
+    # Step 7: Verify QEMU execution
+    - name: Verify QEMU execution
+      run: |
+        qemu-virgl $(brew --prefix)/bin/qemu-system-x86_64 -display cocoa,gl=es --version
+      
+    # Step 8: Create binary package
+    - name: Create binary package
+      run: |
+        mkdir -p artifacts
+        cd source/qemu
+        make install DESTDIR=$(pwd)/../../artifacts/qemu-9.2.1-standard
+        cd ../../
+        tar -czf qemu-9.2.1-standard.tar.gz -C artifacts qemu-9.2.1-standard
+
+    # Step 9: Upload artifacts
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: qemu-9.2.1-standard
+        path: qemu-9.2.1-standard.tar.gz
         retention-days: 7

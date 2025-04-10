@@ -1,0 +1,10 @@
+prefix=/Users/macbookpro/homebrew-qemu-virgl-deps/angle
+exec_prefix=${prefix}
+libdir=${prefix}
+includedir=${prefix}/include
+
+Name: glesv2
+Description: ANGLE OpenGL ES 2.0 implementation for macOS
+Version: 18.2.8
+Libs: -framework OpenGL
+Cflags: -I${includedir}

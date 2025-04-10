@@ -39,6 +39,13 @@ class QemuVirglDeps < Formula
     sha256 "9996b87bda2fbf515473b60f32b00ed58847da733b47053923fd2cb035a6f5a2"
   end
 
+  resource "virglrenderer-angle" do
+    url "https://github.com/akihikodaki/virglrenderer.git",
+        branch: "macos",
+        using: :git
+    version "1.1.0-angle"  # With ANGLE support for macOS
+  end
+
   resource "libepoxy" do
     url "https://github.com/napagokc-io/libepoxy.git", 
         branch: "master",
@@ -163,14 +170,47 @@ class QemuVirglDeps < Formula
       end
     else
       ohai "Building with libepoxy and ANGLE support (EGL enabled)"
+      
+      # Get ANGLE headers path from environment or use default
+      angle_headers = ENV.fetch("ANGLE_HEADERS_PATH", nil)
+      if angle_headers
+        ohai "Using ANGLE headers from: #{angle_headers}"
+        # Show the available headers for debugging
+        system "ls", "-la", angle_headers if File.directory?(angle_headers)
+      else
+        ohai "ANGLE_HEADERS_PATH not specified, using default paths"
+      end
+      
+      # Set include paths for ANGLE
+      angle_include_flags = ""
+      if angle_headers
+        angle_include_flags = "-I#{angle_headers}"
+        # Add main include directory
+        angle_include_flags += " -I#{angle_headers}/include" if File.directory?("#{angle_headers}/include")
+        # Add subdirectories
+        %w[EGL GLES GLES2 GLES3 KHR].each do |subdir|
+          if File.directory?("#{angle_headers}/include/#{subdir}")
+            angle_include_flags += " -I#{angle_headers}/include/#{subdir}"
+          end
+        end
+      end
+
+      if angle_headers && File.exist?("#{angle_headers}/egl.pc")
+        ENV.append_path "PKG_CONFIG_PATH", angle_headers
+      end
+      
       # Build libepoxy with EGL support for Angle
       resource("libepoxy-angle").stage do
+        # Set environment variables for meson build
+        ENV["CFLAGS"] = "-I#{Formula["mesa"].opt_include} #{angle_include_flags} -F#{sdk_path}/System/Library/Frameworks"
+        ENV["CPPFLAGS"] = ENV["CFLAGS"]
+        
         mkdir "build"
         cd "build" do
           system "meson", "setup", "..",
-                 "-Dc_args=-I#{Formula["mesa"].opt_include} -F#{sdk_path}/System/Library/Frameworks -headerpad_max_install_names",
                  "-Degl=yes",         # Enable EGL support for Angle
-                 "-Dx11=false",
+                 "-Dglx=no",          # Disable GLX
+                 "-Dx11=false",       # Disable X11
                  "--prefix=#{prefix}",
                  "--libdir=#{libdir}",
                  "--includedir=#{includedir}/epoxy"
@@ -180,19 +220,25 @@ class QemuVirglDeps < Formula
       end
 
       # Build virglrenderer with Angle support
-      resource("virglrenderer").stage do
+      resource("virglrenderer-angle").stage do
         patch_file = Pathname.new(buildpath/"virgl-sdl-patch")
         resource("virgl-sdl-patch").stage { patch_file.install "0001-Virgil3D-with-SDL2-OpenGL.patch" }
         system "patch", "-p1", "-v", "-i", patch_file/"0001-Virgil3D-with-SDL2-OpenGL.patch"
         
-        ENV["CFLAGS"] = "-F#{sdk_path}/System/Library/Frameworks -I#{includedir} -headerpad_max_install_names"
-        ENV["LDFLAGS"] = "-F#{sdk_path}/System/Library/Frameworks -L#{libdir} -headerpad_max_install_names"
+        # Set comprehensive environment for the build
+        ENV["CFLAGS"] = "-F#{sdk_path}/System/Library/Frameworks -I#{includedir} #{angle_include_flags}"
+        ENV["CPPFLAGS"] = ENV["CFLAGS"] 
+        ENV["LDFLAGS"] = "-F#{sdk_path}/System/Library/Frameworks -L#{libdir}"
+        
+        # Ensure pkg-config can find our libepoxy
+        ENV["PKG_CONFIG_PATH"] = "#{libdir}/pkgconfig:#{ENV["PKG_CONFIG_PATH"]}"
         
         system "meson", "setup", "build",
                "--prefix=#{prefix}",
                "--libdir=#{libdir}",
                "--includedir=#{includedir}/virgl",
                "-Dplatforms=auto",
+               "-Dminigbm=disabled",
                "-Dangle=true"
         
         system "meson", "compile", "-C", "build"
