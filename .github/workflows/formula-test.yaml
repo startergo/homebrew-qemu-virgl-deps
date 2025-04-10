@@ -97,19 +97,18 @@ jobs:
           echo "Original epoxy.pc:"
           cat "$EPOXY_PC"
           
-          # Create a modified version with epoxy_has_egl=1
-          TMP_PC=$(mktemp)
-          sed 's/epoxy_has_egl=0/epoxy_has_egl=1/g' "$EPOXY_PC" > "$TMP_PC"
-          
           # Check if the file needs to be updated
           if [ -w "$EPOXY_PC" ]; then
             # User has write permissions
-            cat "$TMP_PC" > "$EPOXY_PC"
+            echo "epoxy.pc is writable"
           else
             # Try with sudo if needed
-            sudo cp "$TMP_PC" "$EPOXY_PC" || echo "WARNING: Could not update epoxy.pc"
+            sudo echo "epoxy.pc is not writable, attempting with sudo" || echo "WARNING: Could not update epoxy.pc"
           fi
-          rm -f "$TMP_PC"
+          
+          # Ensure epoxy_has_egl=0 for OpenGL Core builds
+          TMP_PC=$(mktemp)
+          sed 's/epoxy_has_egl=1/epoxy_has_egl=0/g' "$EPOXY_PC" > "$TMP_PC"
           
           echo "Modified epoxy.pc:"
           cat "$EPOXY_PC"

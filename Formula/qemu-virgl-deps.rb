@@ -466,6 +466,11 @@ class QemuVirglDeps < Formula
       File.write(epoxy_pc_path, new_content)
     end
 
+    # After the check
+    ohai "Build mode: #{build.with?("opengl-core") ? "OpenGL Core" : "ANGLE"}"  
+    ohai "Expected EGL flag: #{expected_egl}"
+    ohai "Current EGL flag: #{epoxy_pc_content.match(/epoxy_has_egl=\d/).to_s}"
+
     # Verify the fix was applied
     epoxy_has_egl = `pkg-config --variable=epoxy_has_egl epoxy`.chomp
     ohai "epoxy_has_egl is now: #{epoxy_has_egl}"
