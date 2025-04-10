@@ -1,7 +1,7 @@
 class QemuVirglDeps < Formula
   # Define version constants at the top
-  VIRGLRENDERER_VERSION = "1.1.0"
-  LIBEPOXY_VERSION = "1.5.11"
+  VIRGLRENDERER_VERSION = "1.1.0".freeze
+  LIBEPOXY_VERSION = "1.5.11".freeze
   
   desc "Dependencies for QEMU with Virgil 3D acceleration"
   homepage "https://github.com/startergo/qemu-virgl-deps"
@@ -143,6 +143,13 @@ class QemuVirglDeps < Formula
     ENV.append "CFLAGS", "-DGL_SILENCE_DEPRECATION"
     ENV.append "CXXFLAGS", "-DGL_SILENCE_DEPRECATION"
 
+    # When building virglrenderer, add explicit include flags
+    ENV.append "CFLAGS", "-I#{includedir}"
+    ENV.append "CFLAGS", "-I#{includedir}/epoxy"
+
+    # Also make sure PKG_CONFIG_PATH includes libepoxy's path
+    ENV.append_path "PKG_CONFIG_PATH", "#{libdir}/pkgconfig"
+
     sdk_path = Utils.safe_popen_read("xcrun", "--show-sdk-path").chomp
 
     # Set up PKG_CONFIG_PATH for dependencies
@@ -171,6 +178,21 @@ class QemuVirglDeps < Formula
     ohai "epoxy_has_egl: #{epoxy_has_egl}"
     ohai "=== End Environment ==="
 
+    # Add more debug output
+    ohai "Build environment:"
+    ohai "CFLAGS: #{ENV["CFLAGS"]}"
+    ohai "PKG_CONFIG_PATH: #{ENV["PKG_CONFIG_PATH"]}"
+    ohai "Header files:"
+    system "find", "#{includedir}", "-type", "f", "-name", "*.h"
+    system "pkg-config", "--exists", "--debug", "epoxy"
+
+    # Add build environment debug info
+    ohai "Build environment after libepoxy installation:"
+    ohai "Header files in #{includedir}/epoxy:"
+    system "find", "#{includedir}/epoxy", "-type", "f", "-name", "*.h"
+    ohai "Pkg-config for epoxy:"
+    system "pkg-config", "--debug", "--cflags", "epoxy"
+
     # Create a GL pkg-config file
     File.write("#{libdir}/pkgconfig/gl.pc", <<~EOS)
       prefix=/System/Library/Frameworks/OpenGL.framework
@@ -189,45 +211,26 @@ class QemuVirglDeps < Formula
       ohai "Building with OpenGL Core backend (without EGL support)"
       # Build libepoxy with EGL disabled using CMake
       resource("libepoxy").stage do
-        # Ensure GL_SILENCE_DEPRECATION is properly set in source
-        begin
-          inreplace "src/dispatch_common.c", "#include \"dispatch_common.h\"",
-                    "#define GL_SILENCE_DEPRECATION 1\n#include \"dispatch_common.h\""
-        rescue
-          puts "Warning: Failed to insert GL_SILENCE_DEPRECATION"
+        mkdir "build" do
+          system "meson", "setup", *std_meson_args,
+                 "-Dprefix=#{prefix}",
+                 "-Dlibdir=#{libdir}",
+                 "-Dincludedir=#{includedir}",
+                 "-Degl=no", "-Dglx=no", "-Dx11=false",
+                 ".."
+          system "ninja", "-v"
+          system "ninja", "install", "-v"
         end
+      end
 
-        # Fix any other source files with deprecation warnings
-        if File.exist?("test/cgl_epoxy_api.c")
-          cgl_content = File.read("test/cgl_epoxy_api.c")
-          unless cgl_content.include?("GL_SILENCE_DEPRECATION")
-            File.write("test/cgl_epoxy_api.c", "#define GL_SILENCE_DEPRECATION 1\n#{cgl_content}")
-          end
-        end
-
-        if File.exist?("test/cgl_core.c")
-          cgl_content = File.read("test/cgl_core.c")
-          unless cgl_content.include?("GL_SILENCE_DEPRECATION")
-            File.write("test/cgl_core.c", "#define GL_SILENCE_DEPRECATION 1\n#{cgl_content}")
-          end
-        end
-
-        # Make build directory and use CMake (this avoids the meson issues)
-        mkdir "build_cmake"
-        cd "build_cmake" do
-          # Add GL_SILENCE_DEPRECATION to the CMAKE_C_FLAGS
-          system "cmake", "..",
-                 "-DCMAKE_INSTALL_PREFIX=#{prefix}",
-                 "-DCMAKE_INSTALL_LIBDIR=#{libdir}",
-                 "-DCMAKE_INSTALL_INCLUDEDIR=#{includedir}/epoxy",
-                 "-DCMAKE_OSX_SYSROOT=#{sdk_path}",
-                 "-DCMAKE_C_FLAGS=-DGL_SILENCE_DEPRECATION",
-                 "-DENABLE_GLX=OFF",
-                 "-DENABLE_EGL=OFF",
-                 "-DENABLE_X11=OFF",
-                 "-DBUILD_SHARED_LIBS=ON"
-          system "make", "VERBOSE=1"
-          system "make", "install"
+      # After libepoxy installation
+      unless Dir.exist?("#{includedir}/epoxy") && !Dir.glob("#{includedir}/epoxy/*.h").empty?
+        ohai "ERROR: Epoxy headers not found after installation"
+        ohai "Creating them manually"
+        # Fallback to manual header copying from the original source
+        resource("libepoxy").stage do
+          mkdir_p "#{includedir}/epoxy"
+          cp_r "include/epoxy/.", "#{includedir}/epoxy/"
         end
       end
 
@@ -373,8 +376,10 @@ class QemuVirglDeps < Formula
             if content.include?("if cc.has_header('epoxy/egl.h'")
               # Insert the variable and modify the condition
               new_content = content.gsub(
-                %r{(if cc\.has_header\('epoxy\/egl\.h')},
-                "# Make EGL headers optional when using OpenGL Core\n  need_egl = not get_option('opengl_core').enabled()\n\n  if (not need_egl) or \\1",
+                %r{(if cc\.has_header\('epoxy/egl\.h')},
+                "# Make EGL headers optional when using OpenGL Core\n" \
+                "  need_egl = not get_option('opengl_core').enabled()\n\n" \
+                "  if (not need_egl) or \\1",
               )
               File.write("meson.build", new_content)
               ohai "Successfully applied manual EGL optional fix"
