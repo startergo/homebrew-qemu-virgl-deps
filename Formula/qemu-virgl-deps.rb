@@ -10,6 +10,9 @@ class QemuVirglDeps < Formula
   # Make keg-only to prevent automatic linking that causes errors with dylib IDs
   keg_only "this formula is only used by QEMU and shouldn't be linked"
 
+  option "with-opengl-core", "Use OpenGL Core backend directly without ANGLE (EGL disabled)"
+  # When this option is NOT set the build uses libepoxy with EGL enabled and Angle support
+
   # Build dependencies
   depends_on "cmake"       => :build
   depends_on "libtool"     => :build
@@ -21,23 +24,21 @@ class QemuVirglDeps < Formula
 
   # Runtime dependencies
   depends_on "glslang"
-  depends_on "libx11"
   depends_on "libpng"
+  depends_on "libx11"
   depends_on "libxext"  
   depends_on "mesa"
-  depends_on "sdl2"
   depends_on "libxfixes"
   depends_on "libxcb"
-  depends_on "sdl3"
   depends_on "libxau"
-  depends_on "libxdmcp"
+  depends_on "sdl2"
+  depends_on "libxdmcp"  
+  depends_on "sdl3"
   depends_on "xorgproto"  
 
-  option "with-opengl-core", "Use OpenGL Core backend directly without ANGLE (EGL disabled)"
-  # When this option is NOT set the build uses libepoxy with EGL enabled and Angle support
-
+  
   resource "libepoxy" do
-    url "https://github.com/napagokc-io/libepoxy.git", 
+    url "https://github.com/napagokc-io/libepoxy.git",
         branch: "master",
         using: :git
     version "1.5.11" # Use this version number for tracking
@@ -117,7 +118,7 @@ class QemuVirglDeps < Formula
 
     # Create a GL pkg-config file
     mkdir_p "#{libdir}/pkgconfig"
-    rm_f "#{libdir}/pkgconfig/gl.pc"
+    rm "#{libdir}/pkgconfig/gl.pc" if File.exist?("#{libdir}/pkgconfig/gl.pc")
     File.write("#{libdir}/pkgconfig/gl.pc", <<~EOS)
       prefix=/System/Library/Frameworks/OpenGL.framework
       exec_prefix=${prefix}
@@ -155,15 +156,20 @@ class QemuVirglDeps < Formula
       # Build libepoxy with EGL disabled using CMake
       resource("libepoxy").stage do
         # Ensure GL_SILENCE_DEPRECATION is properly set in source
-        inreplace "src/dispatch_common.c", "#include \"dispatch_common.h\"", 
-                  "#define GL_SILENCE_DEPRECATION 1\n#include \"dispatch_common.h\"" rescue nil
+        begin
+          inreplace "src/dispatch_common.c", "#include \"dispatch_common.h\"",
+                    "#define GL_SILENCE_DEPRECATION 1\n#include \"dispatch_common.h\""
+        rescue StandardError => e
+          puts "Warning: Failed to insert GL_SILENCE_DEPRECATION: #{e.message}"
+        end
         
         # Fix any other source files with deprecation warnings - but use a safer approach
         # that doesn't rely on specific patterns
         if File.exist?("test/cgl_epoxy_api.c")
           cgl_content = File.read("test/cgl_epoxy_api.c")
-          File.write("test/cgl_epoxy_api.c", 
-                     "#define GL_SILENCE_DEPRECATION 1\n#{cgl_content}") unless cgl_content.include?("GL_SILENCE_DEPRECATION")
+          unless cgl_content.include?("GL_SILENCE_DEPRECATION")
+            File.write("test/cgl_epoxy_api.c", "#define GL_SILENCE_DEPRECATION 1\n#{cgl_content}")
+          end
         end
         
         if File.exist?("test/cgl_core.c")
@@ -199,7 +205,12 @@ class QemuVirglDeps < Formula
         system "patch", "-p1", "-v", "-i", patch_file/"0001-Virglrenderer-on-Windows-and-macOS.patch"
         
         # Set environment for the build
-        ENV["CFLAGS"] = "-DGL_SILENCE_DEPRECATION -F#{sdk_path}/System/Library/Frameworks -I#{includedir} -headerpad_max_install_names"
+        ENV["CFLAGS"] = [
+          "-DGL_SILENCE_DEPRECATION",
+          "-F#{sdk_path}/System/Library/Frameworks",
+          "-I#{includedir}",
+          "-headerpad_max_install_names"
+        ].join(" ")
         ENV["LDFLAGS"] = "-F#{sdk_path}/System/Library/Frameworks -L#{libdir} -headerpad_max_install_names"
         
         # Use 'auto' platform instead of 'sdl2' as that's the valid option
@@ -362,7 +373,7 @@ class QemuVirglDeps < Formula
     create_helper_scripts(libdir, includedir)
   end
 
-  def create_helper_scripts(libdir, includedir)
+  def create_helper_scripts(libdir, _includedir)
     # Install QEMU helper script
     (bin/"install-qemu-deps").write <<~EOS
       #!/bin/bash
@@ -416,10 +427,10 @@ class QemuVirglDeps < Formula
       echo "Applying patches to QEMU in $QEMU_PATH"
       cd $QEMU_PATH
       
-      # Apply the EGL optional patch first
+      # Apply the EGL optional patch to fix the epoxy/egl.h check
       patch -p1 < $PATCH_DIR/egl-optional.patch || echo "Warning: EGL optional patch failed, may already be applied."
       
-      # Then apply the SDL2 OpenGL patch
+      # Apply the SDL2 OpenGL patch
       patch -p1 < $PATCH_DIR/0001-Virgil3D-with-SDL2-OpenGL.patch || echo "Warning: SDL2 OpenGL patch failed, may already be applied."
       
       echo "Patches applied. Next: compile-qemu-virgl $QEMU_PATH"
@@ -469,6 +480,7 @@ class QemuVirglDeps < Formula
       
       if [ "$OPENGL_CORE" = "true" ]; then
         # OpenGL Core configuration (no EGL/Angle)
+        CONFIG_FLAGS="$CONFIG_FLAGS --enable-opengl-core"
         # Use grep to extract version
         if [ -f ../VERSION ]; then
           QEMU_VERSION=$(grep -o 'VERSION=[0-9]\\+\\.[0-9]\\+\\.[0-9]\\+' ../VERSION 2>/dev/null | cut -d= -f2 || echo "0.0.0")
