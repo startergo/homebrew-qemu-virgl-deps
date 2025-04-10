@@ -9,6 +9,17 @@ on:
 jobs:
   test:
     runs-on: macos-latest
+    strategy:
+      matrix:
+        include:
+          - build_type: "standard"
+            opengl_core: false
+            qemu_version: "9.2.1"
+          - build_type: "opengl-core"
+            opengl_core: true
+            qemu_version: "8.2.1"
+    
+    name: ${{ matrix.build_type }} build
 
     steps:
     # Step 1: Check out the repository
@@ -28,21 +39,38 @@ jobs:
     # Step 4: Fetch QEMU source
     - name: Fetch QEMU source
       run: |
-        fetch-qemu-version 9.2.1 source/qemu
+        fetch-qemu-version ${{ matrix.qemu_version }} source/qemu
 
     # Step 5: Apply 3D enhancement patches (only for OpenGL Core approach)
     - name: Apply 3D enhancement patches
-      if: ${{ matrix.opengl_core == 'true' }}
+      if: ${{ matrix.opengl_core == true }}
       run: |
         apply-3dfx-patches source/qemu
 
     # Step 6: Configure and build QEMU
     - name: Configure and build QEMU
       run: |
-        compile-qemu-virgl source/qemu
+        compile-qemu-virgl source/qemu ${{ matrix.opengl_core && '--opengl-core' || '' }}
         cd source/qemu && make -j$(sysctl -n hw.ncpu)
 
     # Step 7: Verify QEMU execution
     - name: Verify QEMU execution
       run: |
-        qemu-virgl $(brew --prefix)/bin/qemu-system-x86_64 -display cocoa,gl=es --version
+        qemu-virgl $(brew --prefix)/bin/qemu-system-x86_64 -display cocoa,gl=${{ matrix.opengl_core && 'core' || 'es' }} --version
+      
+    # Step 8: Create binary package
+    - name: Create binary package
+      run: |
+        mkdir -p artifacts
+        cd source/qemu
+        make install DESTDIR=$(pwd)/../../artifacts/qemu-${{ matrix.qemu_version }}-${{ matrix.build_type }}
+        cd ../../
+        tar -czf qemu-${{ matrix.qemu_version }}-${{ matrix.build_type }}.tar.gz -C artifacts qemu-${{ matrix.qemu_version }}-${{ matrix.build_type }}
+
+    # Step 9: Upload artifacts
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: qemu-${{ matrix.qemu_version }}-${{ matrix.build_type }}
+        path: qemu-${{ matrix.qemu_version }}-${{ matrix.build_type }}.tar.gz
+        retention-days: 7
