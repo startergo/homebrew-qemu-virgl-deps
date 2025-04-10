@@ -145,13 +145,21 @@ class QemuVirglDeps < Formula
       resource("libepoxy").stage do
         # Ensure GL_SILENCE_DEPRECATION is properly set in source
         inreplace "src/dispatch_common.c", "#include \"dispatch_common.h\"", 
-                  "#define GL_SILENCE_DEPRECATION 1\n#include \"dispatch_common.h\""
+                  "#define GL_SILENCE_DEPRECATION 1\n#include \"dispatch_common.h\"" rescue nil
         
-        # Fix any other source files with deprecation warnings
-        inreplace "test/cgl_epoxy_api.c", "#include <stdio.h>",
-                  "#define GL_SILENCE_DEPRECATION 1\n#include <stdio.h>"
-        inreplace "test/cgl_core.c", "#include <stdio.h>",
-                  "#define GL_SILENCE_DEPRECATION 1\n#include <stdio.h>"
+        # Fix any other source files with deprecation warnings - but use a safer approach
+        # that doesn't rely on specific patterns
+        if File.exist?("test/cgl_epoxy_api.c")
+          cgl_content = File.read("test/cgl_epoxy_api.c")
+          File.write("test/cgl_epoxy_api.c", 
+                     "#define GL_SILENCE_DEPRECATION 1\n#{cgl_content}") unless cgl_content.include?("GL_SILENCE_DEPRECATION")
+        end
+        
+        if File.exist?("test/cgl_core.c")
+          cgl_content = File.read("test/cgl_core.c")
+          File.write("test/cgl_core.c", 
+                     "#define GL_SILENCE_DEPRECATION 1\n#{cgl_content}") unless cgl_content.include?("GL_SILENCE_DEPRECATION")
+        end
         
         # Make build directory and use CMake (this avoids the meson issues)
         mkdir "build_cmake"
@@ -256,33 +264,41 @@ class QemuVirglDeps < Formula
 
       # Build libepoxy with EGL support for Angle
       resource("libepoxy-angle").stage do
-        # Ensure GL_SILENCE_DEPRECATION is properly set
-        inreplace "src/dispatch_common.c", "#include \"dispatch_common.h\"", 
-                  "#define GL_SILENCE_DEPRECATION 1\n#include \"dispatch_common.h\""
+        # Add GL_SILENCE_DEPRECATION to all relevant source files
+        # This is safer than inreplace since it doesn't rely on specific patterns
+        Dir.glob("src/*.{c,h}").each do |file|
+          contents = File.read(file)
+          unless contents.include?("GL_SILENCE_DEPRECATION")
+            File.write(file, "#define GL_SILENCE_DEPRECATION 1\n#{contents}")
+          end
+        end
         
-        # Fix any other source files with deprecation warnings
-        inreplace "test/cgl_epoxy_api.c", "#include <stdio.h>",
-                  "#define GL_SILENCE_DEPRECATION 1\n#include <stdio.h>"
-        inreplace "test/cgl_core.c", "#include <stdio.h>",
-                  "#define GL_SILENCE_DEPRECATION 1\n#include <stdio.h>"
+        Dir.glob("test/*.{c,h}").each do |file|
+          contents = File.read(file)
+          unless contents.include?("GL_SILENCE_DEPRECATION")
+            File.write(file, "#define GL_SILENCE_DEPRECATION 1\n#{contents}")
+          end
+        end
         
-        # Set environment variables for meson build
-        ENV.append_path "CFLAGS", "-DGL_SILENCE_DEPRECATION"
-        ENV.append_path "CXXFLAGS", "-DGL_SILENCE_DEPRECATION"
-        ENV.append_path "CPPFLAGS", "-I#{Formula["mesa"].opt_include} -I#{angle_headers}/include"
-        ENV.append_path "LDFLAGS", "-F#{sdk_path}/System/Library/Frameworks -L#{libdir}"
+        # Configure environment for the build
+        ENV["CFLAGS"] = "-DGL_SILENCE_DEPRECATION #{ENV["CFLAGS"]}"
+        ENV["CXXFLAGS"] = "-DGL_SILENCE_DEPRECATION #{ENV["CXXFLAGS"]}"
+        ENV["CPPFLAGS"] = "-I#{Formula["mesa"].opt_include} -I#{angle_headers}/include #{ENV["CPPFLAGS"]}"
+        ENV["LDFLAGS"] = "-F#{sdk_path}/System/Library/Frameworks -L#{libdir} #{ENV["LDFLAGS"]}"
         
+        # Use a more conservative meson setup to avoid potential issues
         mkdir "build"
         cd "build" do
-          # Basic meson options without the problematic flags
           system "meson", "setup", "..",
+                 "-Degl=yes",
+                 "-Dglx=no",
                  "-Dx11=false",
                  "--prefix=#{prefix}",
                  "--libdir=#{libdir}",
                  "--includedir=#{includedir}/epoxy"
           
-          # Build and install
-          system "ninja"
+          # Use VERBOSE=1 to see any potential warnings/errors
+          system "ninja", "-v"
           system "ninja", "install"
         end
       end
