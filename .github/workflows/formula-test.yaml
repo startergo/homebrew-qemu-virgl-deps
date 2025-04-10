@@ -34,9 +34,26 @@ jobs:
         echo "Installing with OpenGL Core profile..."
         brew install qemu-virgl-deps --with-opengl-core
 
+    # Step 4.5: Ensure helper scripts are in PATH
+    - name: Setup PATH for helper scripts
+      run: |
+        # Add the formula's bin directory to PATH
+        export PATH="$(brew --prefix)/opt/qemu-virgl-deps/bin:$PATH"
+        echo "PATH=$PATH" >> $GITHUB_ENV
+        
+        # Check if the scripts exist and are executable
+        ls -la $(brew --prefix)/opt/qemu-virgl-deps/bin/
+        
+        # Test if we can find the scripts now
+        which fetch-qemu-version || echo "fetch-qemu-version not found"
+        which apply-3dfx-patches || echo "apply-3dfx-patches not found"
+        which compile-qemu-virgl || echo "compile-qemu-virgl not found"
+        which qemu-virgl || echo "qemu-virgl not found"
+
     # Step 5: Fetch QEMU source
     - name: Fetch QEMU source
       run: |
+        export PATH="$(brew --prefix)/opt/qemu-virgl-deps/bin:$PATH"
         fetch-qemu-version 8.2.1 source/qemu
 
     # Step 6: Apply 3D enhancement patches
@@ -124,9 +141,45 @@ jobs:
     - name: Install formula with ANGLE support
       run: |
         echo "Installing with ANGLE/EGL support..."
+        
+        # Export the full absolute path to ANGLE headers
         export ANGLE_HEADERS_PATH="$(pwd)/angle"
-        export HOMEBREW_NO_INSTALL_CLEANUP=1 
-        brew install --verbose qemu-virgl-deps
+        echo "Using ANGLE headers from: $ANGLE_HEADERS_PATH"
+        
+        # Make sure pkg-config can find our custom .pc files
+        export PKG_CONFIG_PATH="$ANGLE_HEADERS_PATH:$PKG_CONFIG_PATH"
+        
+        # Install additional dependencies that might be needed
+        brew install ninja meson pkg-config python3
+        
+        # Install our formula with verbose output and no cleanup
+        HOMEBREW_NO_INSTALL_CLEANUP=1 HOMEBREW_NO_AUTO_UPDATE=1 brew install --verbose qemu-virgl-deps || {
+          echo "Formula installation failed, checking logs:"
+          for log in /Users/runner/Library/Logs/Homebrew/qemu-virgl-deps/*.cc; do
+            echo "=== $log ==="
+            cat $log
+          done
+          exit 1
+        }
+        
+        # Verify the installation
+        brew list qemu-virgl-deps
+        ls -la $(brew --prefix)/opt/qemu-virgl-deps/bin/
+
+    # Step 4.5: Ensure helper scripts are in PATH
+    - name: Setup PATH for helper scripts
+      run: |
+        # Add the formula's bin directory to PATH
+        export PATH="$(brew --prefix)/opt/qemu-virgl-deps/bin:$PATH"
+        echo "PATH=$PATH" >> $GITHUB_ENV
+        
+        # Check if the scripts exist and are executable
+        ls -la $(brew --prefix)/opt/qemu-virgl-deps/bin/
+        
+        # Test if we can find the scripts now
+        which fetch-qemu-version
+        which apply-3dfx-patches
+        which compile-qemu-virgl
 
     # Step 5: Fetch QEMU source
     - name: Fetch QEMU source

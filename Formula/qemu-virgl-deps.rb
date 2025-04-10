@@ -205,6 +205,12 @@ class QemuVirglDeps < Formula
         ENV["CFLAGS"] = "-I#{Formula["mesa"].opt_include} #{angle_include_flags} -F#{sdk_path}/System/Library/Frameworks"
         ENV["CPPFLAGS"] = ENV["CFLAGS"]
         
+        # Ensure pkg-config can find our EGL/GLESv2 definitions
+        if angle_headers
+          ENV.append_path "PKG_CONFIG_PATH", angle_headers
+          system "pkg-config", "--cflags", "egl", "glesv2" rescue nil  # For debugging
+        end
+        
         mkdir "build"
         cd "build" do
           system "meson", "setup", "..",
@@ -370,6 +376,29 @@ class QemuVirglDeps < Formula
       EOS
       chmod 0755, bin/"apply-headers-patch"
     end
+
+    # Add qemu-virgl wrapper script
+    (bin/"qemu-virgl").write <<~EOS
+      #!/bin/bash
+      set -e
+      
+      if [ $# -lt 1 ]; then
+        echo "Usage: $0 <qemu-executable> [qemu-args]"
+        echo "Example: $0 qemu-system-x86_64 -m 4G -drive file=disk.qcow2"
+        exit 1
+      fi
+      
+      QEMU_BIN=$1
+      shift
+      
+      # Set environment variables for proper rendering
+      export LIBGL_ALWAYS_SOFTWARE=0
+      export GALLIUM_DRIVER=swr
+      
+      # Run QEMU with the specified arguments
+      exec "$QEMU_BIN" "$@"
+    EOS
+    chmod 0755, bin/"qemu-virgl"
   end
 
   def caveats
