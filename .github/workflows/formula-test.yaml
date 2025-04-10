@@ -91,6 +91,13 @@ jobs:
     # Step 8: Build QEMU with OpenGL Core
     - name: Build QEMU with OpenGL Core
       run: |
+        # First check (but don't modify) the epoxy.pc file
+        EPOXY_PC="$(brew --prefix)/opt/qemu-virgl-deps/lib/qemu-virgl/pkgconfig/epoxy.pc"
+        if [ -f "$EPOXY_PC" ]; then
+          echo "epoxy.pc content:"
+          cat "$EPOXY_PC"
+        fi
+        
         # First create a modification to the epoxy.pc file to indicate it has EGL support
         EPOXY_PC="$(brew --prefix)/opt/qemu-virgl-deps/lib/qemu-virgl/pkgconfig/epoxy.pc"
         if [ -f "$EPOXY_PC" ]; then
