@@ -14,3 +14,11 @@ index xxxxxx..xxxxxx 100644
      if opengl_core_required
        error('epoxy/egl.h not found')
      else
+@@ -1450,6 +1453,7 @@ if get_option('opengl')
+       opengl_deps += dependency('', required: false)
+     endif
+   endif
++
+ endif
+ 
+ if get_option('vulkan')
