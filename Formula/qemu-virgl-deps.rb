@@ -338,6 +338,14 @@ class QemuVirglDeps < Formula
       # Build libepoxy with EGL support for Angle
       resource("libepoxy-angle").stage do
         ohai "Building libepoxy with ANGLE support using meson"
+        
+        # Create build directory for meson
+        mkdir "build" do
+          system "meson", "setup", *std_meson_args,
+                 "-Dc_args=#{ENV["CFLAGS"]} #{angle_include_flags}",
+                 "-Dc_link_args=#{ENV["LDFLAGS"]}",
+                 "-Degl=yes",
+                 "-Dx11=false",
                  ".."
           system "ninja", "-v"
           system "ninja", "install", "-v"
