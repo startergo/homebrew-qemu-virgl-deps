@@ -26,39 +26,48 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    # Step 2: Tap the repository
+    # Step 2: Check formula syntax
+    - name: Check formula syntax
+      run: |
+        echo "Checking formula for syntax errors..."
+        cat Formula/qemu-virgl-deps.rb
+        # Fix double URL issue in line 51
+        sed -i '' 's/url "url "/url "/' Formula/qemu-virgl-deps.rb
+        brew style --fix Formula/qemu-virgl-deps.rb || true
+
+    # Step 3: Tap the repository
     - name: Tap the repository
       run: |
         brew tap startergo/homebrew-qemu-virgl-deps
 
-    # Step 3: Install the formula
+    # Step 4: Install the formula
     - name: Install the formula
       run: |
         brew install qemu-virgl-deps
 
-    # Step 4: Fetch QEMU source
+    # Step 5: Fetch QEMU source
     - name: Fetch QEMU source
       run: |
         fetch-qemu-version ${{ matrix.qemu_version }} source/qemu
 
-    # Step 5: Apply 3D enhancement patches (only for OpenGL Core approach)
+    # Step 6: Apply 3D enhancement patches (only for OpenGL Core approach)
     - name: Apply 3D enhancement patches
       if: ${{ matrix.opengl_core == true }}
       run: |
         apply-3dfx-patches source/qemu
 
-    # Step 6: Configure and build QEMU
+    # Step 7: Configure and build QEMU
     - name: Configure and build QEMU
       run: |
         compile-qemu-virgl source/qemu ${{ matrix.opengl_core && '--opengl-core' || '' }}
         cd source/qemu && make -j$(sysctl -n hw.ncpu)
 
-    # Step 7: Verify QEMU execution
+    # Step 8: Verify QEMU execution
     - name: Verify QEMU execution
       run: |
         qemu-virgl $(brew --prefix)/bin/qemu-system-x86_64 -display cocoa,gl=${{ matrix.opengl_core && 'core' || 'es' }} --version
       
-    # Step 8: Create binary package
+    # Step 9: Create binary package
     - name: Create binary package
       run: |
         mkdir -p artifacts
@@ -67,7 +76,7 @@ jobs:
         cd ../../
         tar -czf qemu-${{ matrix.qemu_version }}-${{ matrix.build_type }}.tar.gz -C artifacts qemu-${{ matrix.qemu_version }}-${{ matrix.build_type }}
 
-    # Step 9: Upload artifacts
+    # Step 10: Upload artifacts
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
       with:
