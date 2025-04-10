@@ -57,7 +57,7 @@ class QemuVirglDeps < Formula
 
   resource "virgl-macos-patch" do
     url "https://raw.githubusercontent.com/startergo/homebrew-qemu-virgl-deps/main/Patches/0001-Virglrenderer-on-Windows-and-macOS.patch"
-    sha256 "your_sha256_here" # You'll need to calculate the correct SHA256 for this file
+    sha256 "2ca74d78affcabeeb4480bffb1094cfd157ca6b2a9f2745b3063853c3fe670b2" # You'll need to calculate the correct SHA256 for this file
   end
 
   resource "qemu-sdl-patch" do
