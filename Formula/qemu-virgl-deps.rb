@@ -201,26 +201,42 @@ class QemuVirglDeps < Formula
       
       # Build libepoxy with EGL support for Angle
       resource("libepoxy-angle").stage do
+        # Debug: Check if headers exist
+        ohai "Checking for ANGLE headers"
+        if angle_headers
+          system "ls", "-la", angle_headers
+          if File.directory?("#{angle_headers}/include")
+            system "ls", "-la", "#{angle_headers}/include"
+          end
+          if File.directory?("#{angle_headers}/include/EGL")
+            system "ls", "-la", "#{angle_headers}/include/EGL"
+          end
+        end
+        
         # Set environment variables for meson build
         ENV["CFLAGS"] = "-I#{Formula["mesa"].opt_include} #{angle_include_flags} -F#{sdk_path}/System/Library/Frameworks"
         ENV["CPPFLAGS"] = ENV["CFLAGS"]
         
-        # Ensure pkg-config can find our EGL/GLESv2 definitions
-        if angle_headers
-          ENV.append_path "PKG_CONFIG_PATH", angle_headers
-          system "pkg-config", "--cflags", "egl", "glesv2" rescue nil  # For debugging
-        end
+        # Debug: Show environment variables
+        ohai "Build environment:"
+        system "env"
         
         mkdir "build"
         cd "build" do
           system "meson", "setup", "..",
+                 "-Dc_args=#{angle_include_flags}",
                  "-Degl=yes",         # Enable EGL support for Angle
                  "-Dglx=no",          # Disable GLX
                  "-Dx11=false",       # Disable X11
                  "--prefix=#{prefix}",
                  "--libdir=#{libdir}",
                  "--includedir=#{includedir}/epoxy"
-          system "meson", "compile"
+          
+          # Debug: Show meson config
+          system "cat", "meson-info/intro-dependencies.json"
+          system "cat", "meson-info/intro-projectinfo.json"
+          
+          system "meson", "compile", "-v"  # Use verbose flag
           system "meson", "install"
         end
       end
@@ -323,18 +339,33 @@ class QemuVirglDeps < Formula
     EOS
     chmod 0755, bin/"apply-3dfx-patches"
 
-    # Add build script
+    # Add compile-qemu-virgl script
     (bin/"compile-qemu-virgl").write <<~EOS
       #!/bin/bash
       set -e
       
       if [ $# -lt 1 ]; then
-        echo "Usage: $0 <qemu-path>"
+        echo "Usage: $0 <qemu-path> [--opengl-core]"
         exit 1
       fi
       
       QEMU_PATH=$1
-      OPENGL_CORE=#{build.with?("opengl-core") ? "true" : "false"}
+      shift
+      OPENGL_CORE=false
+      
+      # Check for --opengl-core flag
+      while [ "$#" -gt 0 ]; do
+        case "$1" in
+          --opengl-core)
+            OPENGL_CORE=true
+            shift
+            ;;
+          *)
+            echo "Unknown option: $1"
+            exit 1
+            ;;
+        esac
+      done
       
       echo "Configuring QEMU with Virgil3D support..."
       cd $QEMU_PATH
@@ -351,10 +382,18 @@ class QemuVirglDeps < Formula
       
       if [ "$OPENGL_CORE" = "true" ]; then
         # OpenGL Core configuration (no EGL/Angle)
-        CONFIG_FLAGS="$CONFIG_FLAGS --disable-egl-headless"
+        # Note: --disable-egl-headless might not be available in all QEMU versions
+        # Check QEMU version to see if this flag is supported
+        QEMU_VERSION=$(grep -oE 'VERSION=[0-9]+\\.[0-9]+\\.[0-9]+' ../VERSION | cut -d= -f2)
+        if [[ $(echo "$QEMU_VERSION 7.0.0" | tr " " "\\n" | sort -V | head -n1) == "7.0.0" ]]; then
+          # For QEMU 7.0.0 and newer, use --disable-egl-headless
+          CONFIG_FLAGS="$CONFIG_FLAGS --disable-egl-headless"
+        fi
       else
         # Standard configuration with Angle
-        CONFIG_FLAGS="$CONFIG_FLAGS --enable-egl-headless"
+        if [[ -f ../configure --help | grep -q "egl-headless" ]]; then
+          CONFIG_FLAGS="$CONFIG_FLAGS --enable-egl-headless"
+        fi
       fi
       
       # Run configuration

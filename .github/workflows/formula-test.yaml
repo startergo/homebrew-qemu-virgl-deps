@@ -145,26 +145,37 @@ jobs:
         # Export the full absolute path to ANGLE headers
         export ANGLE_HEADERS_PATH="$(pwd)/angle"
         echo "Using ANGLE headers from: $ANGLE_HEADERS_PATH"
+        ls -la $ANGLE_HEADERS_PATH
+        ls -la $ANGLE_HEADERS_PATH/include
         
         # Make sure pkg-config can find our custom .pc files
         export PKG_CONFIG_PATH="$ANGLE_HEADERS_PATH:$PKG_CONFIG_PATH"
+        pkg-config --exists egl || echo "egl.pc not found in pkg-config path"
+        pkg-config --exists glesv2 || echo "glesv2.pc not found in pkg-config path"
         
-        # Install additional dependencies that might be needed
-        brew install ninja meson pkg-config python3
-        
-        # Install our formula with verbose output and no cleanup
-        HOMEBREW_NO_INSTALL_CLEANUP=1 HOMEBREW_NO_AUTO_UPDATE=1 brew install --verbose qemu-virgl-deps || {
+        # Try installing our formula with debug output
+        HOMEBREW_NO_INSTALL_CLEANUP=1 HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_MAKE_JOBS=1 brew install -v qemu-virgl-deps || {
           echo "Formula installation failed, checking logs:"
-          for log in /Users/runner/Library/Logs/Homebrew/qemu-virgl-deps/*.cc; do
+          for log in /Users/runner/Library/Logs/Homebrew/qemu-virgl-deps/*; do
             echo "=== $log ==="
             cat $log
           done
+          
+          # Try direct build without the formula for debugging
+          git clone https://github.com/akihikodaki/libepoxy.git --branch macos libepoxy-angle
+          cd libepoxy-angle
+          
+          export CFLAGS="-I$ANGLE_HEADERS_PATH/include -F/Library/Developer/CommandLineTools/SDKs/MacOSX14.sdk/System/Library/Frameworks"
+          export CPPFLAGS="$CFLAGS"
+          export PKG_CONFIG_PATH="$ANGLE_HEADERS_PATH:$PKG_CONFIG_PATH"
+          
+          mkdir build
+          cd build
+          meson setup .. -Degl=yes -Dglx=no -Dx11=false --prefix=$HOME/libepoxy
+          meson compile
+          
           exit 1
         }
-        
-        # Verify the installation
-        brew list qemu-virgl-deps
-        ls -la $(brew --prefix)/opt/qemu-virgl-deps/bin/
 
     # Step 4.5: Ensure helper scripts are in PATH
     - name: Setup PATH for helper scripts
