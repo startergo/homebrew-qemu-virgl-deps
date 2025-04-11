@@ -144,8 +144,8 @@ jobs:
           grep "epoxy_has_egl" "$EPOXY_PC" || echo "No epoxy_has_egl variable found"
         fi
         
-        # Get include directory from epoxy.pc directly instead of pkg-config
-        EPOXY_INCLUDE_DIR=$(grep "includedir=" "$EPOXY_PC" | head -1 | cut -d'=' -f2)
+        # Fix the path extraction to avoid path duplication
+        EPOXY_INCLUDE_DIR=$(grep includedir= "$EPOXY_PC" | head -1 | cut -d'=' -f2 | sed 's|/epoxy$||')
         if [ -z "$EPOXY_INCLUDE_DIR" ]; then
           echo "WARNING: includedir not found in epoxy.pc, using fallback"
           EPOXY_INCLUDE_DIR="$(brew --prefix)/opt/qemu-virgl-deps/include/qemu-virgl"
@@ -373,9 +373,34 @@ jobs:
       run: |
         fetch-qemu-version 9.2.1 source/qemu
 
-    # Step 6: Configure and build QEMU
+    # Step 6: Configure and build QEMU with improved virglrenderer configuration
     - name: Configure and build QEMU
       run: |
+        # Ensure we know where virglrenderer is
+        VIRGL_PC_PATH=$(find $(brew --prefix) -name "virglrenderer.pc" 2>/dev/null || echo "")
+        if [ -z "$VIRGL_PC_PATH" ]; then
+          echo "WARNING: virglrenderer.pc not found in Homebrew prefix"
+          # It might be installed as part of qemu-virgl-deps or another formula
+          VIRGL_PC_PATH=$(find $(brew --prefix)/opt -name "virglrenderer.pc" 2>/dev/null || echo "")
+        fi
+        
+        if [ -n "$VIRGL_PC_PATH" ]; then
+          echo "Found virglrenderer.pc at: $VIRGL_PC_PATH"
+          VIRGL_PC_DIR=$(dirname "$VIRGL_PC_PATH")
+          echo "Adding virglrenderer pkg-config path: $VIRGL_PC_DIR"
+          export PKG_CONFIG_PATH="$VIRGL_PC_DIR:$(brew --prefix)/opt/qemu-virgl-deps/lib/qemu-virgl/pkgconfig:$PKG_CONFIG_PATH"
+        else
+          echo "ERROR: Could not find virglrenderer.pc anywhere!"
+          # Try with default paths anyway
+          export PKG_CONFIG_PATH="$(brew --prefix)/lib/pkgconfig:$(brew --prefix)/opt/qemu-virgl-deps/lib/qemu-virgl/pkgconfig:$PKG_CONFIG_PATH"
+        fi
+        
+        # Test pkg-config configuration
+        echo "Testing pkg-config paths for virglrenderer:"
+        pkg-config --list-all | grep virgl || echo "virglrenderer not found in pkg-config"
+        
+        # Try compile-qemu-virgl with environment set up
+        echo "Configuring QEMU with virglrenderer..."
         compile-qemu-virgl source/qemu
         cd source/qemu/build && make -j$(sysctl -n hw.ncpu)
 
