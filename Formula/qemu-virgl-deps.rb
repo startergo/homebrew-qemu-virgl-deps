@@ -76,7 +76,7 @@ class QemuVirglDeps < Formula
 
   resource "egl-optional-patch" do
     url "https://raw.githubusercontent.com/startergo/homebrew-qemu-virgl-deps/main/Patches/egl-optional.patch"
-    sha256 "7ed32575db8a13e29de9802fcfc37671d5e6b6e056bb6060a25065a1eba33d5a"
+    sha256 "9d1c63a3a941b1344007a7a773baaacf651d416b8ed7227eaacf309ea23f66ec"
   end
 
   def install
@@ -281,7 +281,7 @@ class QemuVirglDeps < Formula
       cp -R "qemu-${VERSION}/"* .
       
       # Check if there are hidden files and copy them too
-      if [ -n "$(ls -A "qemu-${VERSION}/" | grep '^\.')" ]; then
+      if [ -n "$(ls -A "qemu-${VERSION}/" | grep '^\\.')" ]; then
         cp -R "qemu-${VERSION}"/.[!.]* . 2>/dev/null || true
       fi
       

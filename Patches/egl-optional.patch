@@ -1,16 +1,31 @@
+diff --git a/meson_options.txt b/meson_options.txt
+index abcdef123..987654321 100644
+--- a/meson_options.txt
++++ b/meson_options.txt
+@@ -197,6 +197,9 @@ option('opengl', type : 'feature', value : 'auto',
+        description: 'OpenGL support')
++option('opengl_core', type: 'boolean', value: false,
++       description: 'Use OpenGL Core profile instead of EGL')
++
+ option('gio', type : 'feature', value : 'auto',
+        description: 'use libgio for D-Bus support')
+`````
+
+`````diff
 diff --git a/meson.build b/meson.build
 index xxxxxx..yyyyyy 100644
 --- a/meson.build
 +++ b/meson.build
 @@ -1433,7 +1433,10 @@ if not get_option('opengl').auto() or have_system or have_vhost_user_gpu
    epoxy = dependency('epoxy', method: 'pkg-config',
-                       required: get_option('opengl'))
+                      required: get_option('opengl'))
    
 +  # Make EGL headers optional when using OpenGL Core
-+  need_egl = not get_option('opengl_core').enabled()
++  need_egl = not get_option('opengl_core')
 +  
 -  if cc.has_header('epoxy/egl.h', dependencies: epoxy)
 +  if (not need_egl) or cc.has_header('epoxy/egl.h', dependencies: epoxy)
      opengl = epoxy
    elif get_option('opengl').enabled()
      error('epoxy/egl.h not found')
+```
