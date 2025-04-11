@@ -10,35 +10,40 @@
 
   cd "$QEMU_SRC"
   
-  # Apply patches if needed for OpenGL Core
+  # Apply patches first if using OpenGL Core
   if [ "#{build.with?("opengl-core") ? "true" : "false"}" = "true" ]; then
-    echo "Adding OpenGL Core option to QEMU..."
-    add-opengl-core-option "$QEMU_SRC"
+    echo "===== Adding OpenGL Core option to QEMU meson build ====="
+    #{opt_bin}/add-opengl-core-option "$QEMU_SRC"
     
-    echo "Applying EGL optional headers patch..."
-    apply-headers-patch "$QEMU_SRC"
+    echo "===== Applying EGL headers patch for OpenGL Core ====="
+    #{opt_bin}/apply-headers-patch "$QEMU_SRC"
+    
+    # Verify the option was added
+    if grep -q "option('opengl_core'" meson_options.txt; then
+      echo "✓ Successfully added OpenGL Core option"
+      OPENGL_FLAGS="--meson-option=opengl_core=true"
+    else
+      echo "ERROR: Failed to add OpenGL Core option to meson_options.txt"
+      exit 1
+    fi
+  else
+    OPENGL_FLAGS=""
   fi
 
   mkdir -p build
   cd build
-
+  
   # Set up environment
   export PKG_CONFIG_PATH="#{opt_lib}/qemu-virgl/pkgconfig:$PKG_CONFIG_PATH"
   
-  # Determine configure flags based on build type
-  if [ "#{build.with?("opengl-core") ? "true" : "false"}" = "true" ]; then
-    echo "Configuring QEMU with OpenGL Core support..."
-    configure_flags="--meson-option=opengl_core=true"
-  else
-    configure_flags=""
-  fi
-  
   # Configure with appropriate options
+  echo "===== Configuring QEMU ====="
   ../configure --prefix=/usr/local \\
     --enable-opengl \\
     --enable-virglrenderer \\
     --extra-cflags="-I#{opt_include}/qemu-virgl" \\
     --extra-ldflags="-L#{opt_lib}/qemu-virgl" \\
-    $configure_flags
+    $OPENGL_FLAGS
 
-  echo "QEMU configured successfully. Now run 'make -j$(sysctl -n hw.ncpu)' to build."
+  echo "===== QEMU configured successfully ====="
+  echo "Now run: cd build && make -j$(sysctl -n hw.ncpu)"

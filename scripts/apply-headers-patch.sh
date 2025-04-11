@@ -82,10 +82,21 @@ if build.with? "opengl-core"
     
     cd "$QEMU_SRC"
     
-    # Apply EGL optional patch for OpenGL Core
-    patch -p1 < "#{opt_prefix}/share/qemu-virgl-deps/egl-optional.patch" || echo "Patch may have already been applied"
+    PATCH_FILE="#{opt_share}/qemu-virgl-deps/egl-optional.patch"
     
-    echo "Headers patch applied successfully."
+    # Check if patch exists
+    if [ ! -f "$PATCH_FILE" ]; then
+      echo "ERROR: Patch file not found at $PATCH_FILE"
+      exit 1
+    fi
+    
+    echo "Applying EGL optional patch from: $PATCH_FILE"
+    patch -p1 -i "$PATCH_FILE" || {
+      echo "Patch failed to apply cleanly. It may have already been applied or the source files are different."
+      echo "Continue anyway..."
+    }
+    
+    echo "Headers patch process completed."
   EOS
   chmod 0755, bin/"apply-headers-patch"
 end
