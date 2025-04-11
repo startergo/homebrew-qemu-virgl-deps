@@ -217,7 +217,7 @@ class QemuVirglDeps < Formula
       ohai "Building virglrenderer with OpenGL Core support"
       resource("virglrenderer-core").stage do
         # Apply virgl-macos patch
-        system "patch", "-p1", "-i", "#{buildpath}/0001-Virglrenderer-on-Windows-and-macOS.patch"
+        system "patch", "-p1", "-i", "#{prefix}/share/qemu-virgl-deps/0001-Virglrenderer-on-Windows-and-macOS.patch"
         
         # Configure and build
         mkdir "build" do
