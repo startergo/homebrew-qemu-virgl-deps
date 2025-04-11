@@ -70,6 +70,9 @@ if [ "$BUILD_OPENGL_CORE" == "1" ]; then
   "$PATCH_SCRIPT"
 fi
 
+# Initialize configure_flags
+configure_flags=""
+
 # Just use one variable (OPENGL_CORE) and standardize on boolean values
 if [ "$OPENGL_CORE" = "true" ]; then
   # OpenGL Core mode configuration
@@ -127,16 +130,11 @@ fi
 # Change directory to the QEMU source and run configure with required options for Virgl support.
 cd "$QEMU_SRC"
 
-configure_flags=""
-if [ "$OPENGL_CORE" = "true" ]; then
-  configure_flags="$configure_flags --meson-option=opengl_core=true"
-fi
-
 ../configure --prefix=/usr/local \
   --enable-opengl \
   --enable-virglrenderer \
-  --extra-cflags="-I$BREW_PREFIX/opt/qemu-virgl-deps/include/qemu-virgl" \
-  --extra-ldflags="-L$BREW_PREFIX/opt/qemu-virgl-deps/lib/qemu-virgl" \
+  --extra-cflags="-I$QEMU_INCLUDE_DIR" \
+  --extra-ldflags="-L$QEMU_LIB_DIR" \
   $configure_flags "$@"
 
 if [ $? -ne 0 ]; then

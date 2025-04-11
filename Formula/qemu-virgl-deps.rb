@@ -35,6 +35,7 @@ class QemuVirglDeps < Formula
   depends_on "sdl2"
   depends_on "sdl3"
   depends_on "xorgproto"
+  depends_on "virglrenderer" => :run
 
   # Add macOS-compatible dependencies, alphabetically ordered
   depends_on "erofs-utils" => :recommended
@@ -227,9 +228,9 @@ class QemuVirglDeps < Formula
 
     # Now build and install the appropriate libepoxy version
     if build.with? "opengl-core"
-      ohai "Building libepoxy with OpenGL Core support"
+      # OpenGL Core build
       resource("libepoxy").stage do
-        # Configure and build
+        # Build libepoxy for OpenGL Core
         mkdir "build" do
           system "meson", "setup", *std_meson_args,
                  "--prefix=#{prefix}",
@@ -241,14 +242,24 @@ class QemuVirglDeps < Formula
           system "ninja", "install", "-v"
         end
       end
+
+      # Build virglrenderer for OpenGL Core
+      resource("virglrenderer-core").stage do
+        mkdir "build" do
+          system "meson", "setup", *std_meson_args,
+                 "--prefix=#{prefix}",
+                 "--libdir=#{libdir}",
+                 "--includedir=#{includedir}",
+                 "-Dminigbm=disabled",
+                 "-Dplatforms=egl,glx",
+                 ".."
+          system "ninja", "-v"
+          system "ninja", "install", "-v"
+        end
+      end
     else
-      ohai "Building libepoxy with ANGLE support"
+      # Standard ANGLE build
       resource("libepoxy-angle").stage do
-        # Set environment variables for ANGLE headers
-        ENV.append "CFLAGS", "-I#{HOMEBREW_PREFIX}/include -F#{MacOS.sdk_path}/System/Library/Frameworks"
-        ENV.append "CPPFLAGS", "-I#{HOMEBREW_PREFIX}/include"
-        
-        # Configure and build
         mkdir "build" do
           system "meson", "setup", *std_meson_args,
                  "--prefix=#{prefix}",
@@ -260,49 +271,9 @@ class QemuVirglDeps < Formula
           system "ninja", "install", "-v"
         end
       end
-    end
 
-    # After building libepoxy, ensure the pkg-config path is updated
-    ENV.append_path "PKG_CONFIG_PATH", "#{libdir}/pkgconfig"
-
-    # Build and install the appropriate virglrenderer version
-    if build.with? "opengl-core"
-      ohai "Building virglrenderer with OpenGL Core support"
-      resource("virglrenderer-core").stage do
-        # Apply virgl-macos patch with direct path to resource file if buildpath fails
-        patch_file = buildpath/"patches/0001-Virglrenderer-on-Windows-and-macOS.patch"
-        
-        unless File.exist?(patch_file)
-          # Fall back to directly using the resource
-          resource("virgl-macos-patch").stage do
-            patch_file = Pathname.pwd/"0001-Virglrenderer-on-Windows-and-macOS.patch"
-            system "patch", "-p1", "--verbose", "-i", patch_file
-          end
-        else
-          system "patch", "-p1", "--verbose", "-i", patch_file
-        end
-        
-        # Configure and build
-        mkdir "build" do
-          system "meson", "setup", *std_meson_args,
-                 "--prefix=#{prefix}",
-                 "--libdir=#{libdir}",
-                 "--includedir=#{includedir}",
-                 "-Dminigbm=disabled",
-                 "-Dplatforms=egl,glx",
-                 "-Dc_args=-I#{includedir}/epoxy",
-                 ".."
-          system "ninja", "-v"
-          system "ninja", "install", "-v"
-        end
-      end
-    else
-      ohai "Building virglrenderer with ANGLE support"
+      # Build virglrenderer for ANGLE
       resource("virglrenderer-angle").stage do
-        # Set up environment
-        ENV.append "PKG_CONFIG_PATH", "#{libdir}/pkgconfig:#{ENV["PKG_CONFIG_PATH"]}"
-        
-        # Configure and build
         mkdir "build" do
           system "meson", "setup", *std_meson_args,
                  "--prefix=#{prefix}",

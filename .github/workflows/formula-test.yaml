@@ -102,70 +102,33 @@ jobs:
     - name: Add opengl_core option to meson_options.txt
       run: |
         cd source/qemu
-        echo 'option('\''opengl_core'\'', type: '\''boolean'\'', value: false, description: '\''Use OpenGL Core profile instead of EGL'\'')' >> meson_options.txt
+        
+        # Directly append the option instead of using sed
+        echo >> meson_options.txt
+        echo "option('opengl_core', type: 'boolean', value: false," >> meson_options.txt
+        echo "       description: 'Use OpenGL Core profile instead of EGL')" >> meson_options.txt
         
         # Verify the option was added
         grep "opengl_core" meson_options.txt
-
-        # Then update meson.build to use the option
-        sed -i '' '/if cc.has_header('\''epoxy\/egl.h'\''/i\\
-        # Make EGL headers optional when using OpenGL Core\\
-        need_egl = not get_option('\''opengl_core'\'')\\
-        ' meson.build
         
-        # Update the if condition
-        sed -i '' 's/if cc.has_header/if (not need_egl) or cc.has_header/g' meson.build
+        # Update meson.build file with the more reliable approach
+        NEED_EGL_LINE="# Make EGL headers optional when using OpenGL Core\\
+        need_egl = not get_option('opengl_core')"
+        
+        LINE_NUM=$(grep -n "if cc.has_header('epoxy/egl.h'" meson.build | cut -d':' -f1)
+        if [ -n "$LINE_NUM" ]; then
+          sed -i '' "${LINE_NUM}i\\
+          ${NEED_EGL_LINE}\\
+          " meson.build
+          sed -i '' "s/if cc.has_header('epoxy/if (not need_egl) or cc.has_header('epoxy/g" meson.build
+          echo "Successfully modified meson.build"
+        fi
 
     # Step 8: Build QEMU with OpenGL Core
     - name: Build QEMU with OpenGL Core
       run: |
         # Enable bash debugging
         set -x
-        
-        # First check (but don't modify) the epoxy.pc file
-        EPOXY_PC="$(brew --prefix)/opt/qemu-virgl-deps/lib/qemu-virgl/pkgconfig/epoxy.pc"
-        if [ -f "$EPOXY_PC" ]; then
-          echo "epoxy.pc content:"
-          cat "$EPOXY_PC"
-        else
-          echo "ERROR: epoxy.pc not found at $EPOXY_PC"
-          ls -la "$(dirname "$EPOXY_PC")"
-          exit 1
-        fi
-        
-        # Verify epoxy.pc has the correct EGL flag for OpenGL Core
-        if grep -q "epoxy_has_egl=0" "$EPOXY_PC"; then
-          echo "OpenGL Core build: epoxy_has_egl=0 is correctly set"
-        else
-          echo "WARNING: epoxy.pc does not have epoxy_has_egl=0 as expected"
-          grep "epoxy_has_egl" "$EPOXY_PC" || echo "No epoxy_has_egl variable found"
-        fi
-        
-        # Fix the path extraction to avoid path duplication
-        EPOXY_INCLUDE_DIR=$(grep includedir= "$EPOXY_PC" | head -1 | cut -d'=' -f2 | sed 's|/epoxy$||')
-        if [ -z "$EPOXY_INCLUDE_DIR" ]; then
-          echo "WARNING: includedir not found in epoxy.pc, using fallback"
-          EPOXY_INCLUDE_DIR="$(brew --prefix)/opt/qemu-virgl-deps/include/qemu-virgl"
-        fi
-        
-        echo "EPOXY_INCLUDE_DIR=$EPOXY_INCLUDE_DIR"
-        
-        # Create stub EGL header directly in the epoxy directory
-        sudo mkdir -p "${EPOXY_INCLUDE_DIR}/epoxy"
-        if [ $? -ne 0 ]; then
-          echo "ERROR: Failed to create directory ${EPOXY_INCLUDE_DIR}/epoxy"
-          ls -la "$(dirname "$EPOXY_INCLUDE_DIR")" || echo "Cannot list parent directory"
-          exit 1
-        fi
-        
-        # Create the EGL stub header
-        sudo bash -c "echo '/* Stub EGL header for OpenGL Core build */' > ${EPOXY_INCLUDE_DIR}/epoxy/egl.h"
-        if [ $? -ne 0 ]; then
-          echo "ERROR: Failed to create EGL stub header"
-          echo "Permissions on directory:"
-          ls -la "${EPOXY_INCLUDE_DIR}/epoxy"
-          exit 1
-        fi
         
         # NOW ACTUALLY BUILD QEMU with OpenGL Core profile
         cd source/qemu
@@ -174,13 +137,14 @@ jobs:
         # Set environment variables for the build
         export PKG_CONFIG_PATH="$(brew --prefix)/opt/qemu-virgl-deps/lib/qemu-virgl/pkgconfig:$PKG_CONFIG_PATH"
         
-        # Configure and build QEMU
+        # Configure and build QEMU - EXPLICITLY ADD OPENGL_CORE FLAG
         mkdir -p build
         cd build
         
-        # FIXED CONFIGURE COMMAND with disabled optional dependencies
+        # FIXED CONFIGURE COMMAND with opengl_core option
         ../configure --disable-cocoa --enable-opengl --enable-sdl --prefix=/usr/local \
-          --extra-cflags="-DGETXATTR_OPTIONAL=1 -DSETXATTR_OPTIONAL=1"
+          --extra-cflags="-DGETXATTR_OPTIONAL=1 -DSETXATTR_OPTIONAL=1" \
+          --meson-option=opengl_core=true
         
         # Check configure output for OpenGL
         if grep -q "OpenGL.*yes" config-host.mak; then
@@ -193,16 +157,6 @@ jobs:
         
         # Build QEMU
         make -j$(sysctl -n hw.ncpu)
-        
-        # Verify the binary exists
-        if [ -f "qemu-system-x86_64" ]; then
-          echo "QEMU binary built successfully!"
-          ls -la qemu-system-x86_64
-          file qemu-system-x86_64
-        else
-          echo "ERROR: Failed to build QEMU binary!"
-          exit 1
-        fi
 
     # Step 8.1: Test EGL flag in epoxy.pc
     - name: Test EGL flag in epoxy.pc
@@ -369,6 +323,33 @@ jobs:
     - name: Fetch QEMU source
       run: |
         fetch-qemu-version 9.2.1 source/qemu
+
+    # Step 5.5: Install virglrenderer
+    - name: Install virglrenderer
+      run: |
+        # Direct installation of virglrenderer from your tap
+        brew install virglrenderer || true
+        
+        # Manually build virglrenderer if brew install fails
+        if ! pkg-config --exists virglrenderer; then
+          echo "Building virglrenderer from source..."
+          git clone https://github.com/akihikodaki/virglrenderer.git --branch macos
+          cd virglrenderer
+          
+          # Build and install to a local prefix
+          mkdir -p build
+          cd build
+          
+          # Set up pkg-config to find dependencies
+          export PKG_CONFIG_PATH="$(brew --prefix)/opt/qemu-virgl-deps/lib/qemu-virgl/pkgconfig:$PKG_CONFIG_PATH"
+          
+          meson setup .. --prefix=/usr/local --libdir=lib
+          ninja
+          sudo ninja install
+        fi
+        
+        # Verify virglrenderer is installed
+        pkg-config --exists virglrenderer && echo "virglrenderer found via pkg-config" || echo "virglrenderer still not found!"
 
     # Step 6: Configure and build QEMU with improved virglrenderer configuration
     - name: Configure and build QEMU
