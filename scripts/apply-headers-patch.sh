@@ -67,4 +67,7 @@ else
   exit 1
 fi
 
+# Apply EGL optional patch
+patch -p1 < "#{opt_share}/qemu-virgl-deps/egl-optional.patch" || echo "Patch may have already been applied"
+
 echo "Headers patch applied successfully."
