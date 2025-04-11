@@ -56,6 +56,11 @@ fi
       exit 1
     fi
   fi
+
+  # This line has Ruby syntax in a bash script
+  if [ -n "$(ls -A "qemu-${VERSION}/" | grep '^\\.')" ]; then
+    cp -R "qemu-${VERSION}"/.[!.]* . 2>/dev/null || true
+  fi  # <-- This should be "fi", not end
  
   # Apply version-specific patches
   if [ "$QEMU_VERSION" == "9.2.1" ]; then

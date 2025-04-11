@@ -35,7 +35,6 @@ class QemuVirglDeps < Formula
   depends_on "sdl2"
   depends_on "sdl3"
   depends_on "xorgproto"
-  depends_on "virglrenderer" => :run
 
   # Add macOS-compatible dependencies, alphabetically ordered
   depends_on "erofs-utils" => :recommended
@@ -214,17 +213,13 @@ class QemuVirglDeps < Formula
     # Extract all patches first to a temporary location before building virglrenderer
     mkdir_p buildpath/"patches"
 
-    # Extract resource with explicit file copying for better error detection
-    resource("virgl-macos-patch").stage do
-      cp Dir["*"], buildpath/"patches/"
-      # Verify the file was copied
-      system "ls", "-la", buildpath/"patches/"
-    end
-
-    resource("qemu-v06-patch").stage { cp Dir["*"], buildpath/"patches/" }
-    resource("qemu-sdl-patch").stage { cp Dir["*"], buildpath/"patches/" }
-    resource("glsl-patch").stage { cp Dir["*"], buildpath/"patches/" }
-    resource("egl-optional-patch").stage { cp Dir["*"], buildpath/"patches/" }
+    # Correct resource staging
+    mkdir_p "#{share}/qemu-virgl-deps"
+    resource("qemu-v06-patch").stage { mv "qemu-v06.diff", "#{share}/qemu-virgl-deps/" }
+    resource("virgl-macos-patch").stage { mv "0001-Virglrenderer-on-Windows-and-macOS.patch", "#{share}/qemu-virgl-deps/" }
+    resource("qemu-sdl-patch").stage { mv "0001-Virgil3D-with-SDL2-OpenGL.patch", "#{share}/qemu-virgl-deps/" }
+    resource("glsl-patch").stage { mv "0002-Virgil3D-macOS-GLSL-version.patch", "#{share}/qemu-virgl-deps/" }
+    resource("egl-optional-patch").stage { mv "egl-optional.patch", "#{share}/qemu-virgl-deps/" }
 
     # Now build and install the appropriate libepoxy version
     if build.with? "opengl-core"
@@ -245,6 +240,9 @@ class QemuVirglDeps < Formula
 
       # Build virglrenderer for OpenGL Core
       resource("virglrenderer-core").stage do
+        # Apply the patch correctly
+        system "patch", "-p1", "-i", "#{share}/qemu-virgl-deps/0001-Virglrenderer-on-Windows-and-macOS.patch"
+        
         mkdir "build" do
           system "meson", "setup", *std_meson_args,
                  "--prefix=#{prefix}",
@@ -258,8 +256,38 @@ class QemuVirglDeps < Formula
         end
       end
     else
-      # Standard ANGLE build
+      # Standard ANGLE build - use local ANGLE headers and libraries
+      ohai "Building with local ANGLE headers and libraries"
+      
+      # Copy the local ANGLE headers to the include directory
+      angle_dir = Pathname.new(File.expand_path("../../angle", __dir__))
+      
+      # Add error checking:
+      unless angle_dir.exist?
+        ohai "ERROR: Required ANGLE directory not found at #{angle_dir}"
+        raise "Missing ANGLE headers directory at #{angle_dir}"
+      end
+      
+      # Copy headers
+      ohai "Copying ANGLE headers from #{angle_dir}/include"
+      cp_r "#{angle_dir}/include/.", "#{includedir}/"
+      
+      # Copy libraries
+      ohai "Copying ANGLE libraries from #{angle_dir}"
+      cp "#{angle_dir}/libEGL.dylib", libdir
+      cp "#{angle_dir}/libGLESv2.dylib", libdir
+      
+      # Copy pkg-config files
+      ohai "Copying ANGLE pkg-config files"
+      cp "#{angle_dir}/egl.pc", "#{libdir}/pkgconfig/"
+      cp "#{angle_dir}/glesv2.pc", "#{libdir}/pkgconfig/"
+      
+      # Now build libepoxy-angle with the local ANGLE headers
       resource("libepoxy-angle").stage do
+        # Add includes for the local ANGLE headers
+        ENV.append "CFLAGS", "-I#{includedir}"
+        ENV.append "CPPFLAGS", "-I#{includedir}"
+        
         mkdir "build" do
           system "meson", "setup", *std_meson_args,
                  "--prefix=#{prefix}",
@@ -271,10 +299,17 @@ class QemuVirglDeps < Formula
           system "ninja", "install", "-v"
         end
       end
-
+      
       # Build virglrenderer for ANGLE
       resource("virglrenderer-angle").stage do
+        # Ensure virglrenderer can find the necessary headers
+        ENV.append "CFLAGS", "-I#{includedir}"
+        ENV.append "CPPFLAGS", "-I#{includedir}"
+        
         mkdir "build" do
+          # Update pkg-config path to find our local EGL files
+          ENV.append_path "PKG_CONFIG_PATH", "#{libdir}/pkgconfig"
+          
           system "meson", "setup", *std_meson_args,
                  "--prefix=#{prefix}",
                  "--libdir=#{libdir}",
@@ -378,7 +413,7 @@ class QemuVirglDeps < Formula
       # Check if there are hidden files and copy them too
       if [ -n "$(ls -A "qemu-${VERSION}/" | grep '^\\.')" ]; then
         cp -R "qemu-${VERSION}"/.[!.]* . 2>/dev/null || true
-      end
+      fi
       
       # Remove the source directory with force
       rm -rf "qemu-${VERSION}"
@@ -443,19 +478,19 @@ class QemuVirglDeps < Formula
       chmod 0755, bin/"apply-headers-patch"
     end
 
+    # Add this to your install method
+    (bin/"add-opengl-core-option").write Utils.safe_read("#{buildpath}/../scripts/add-opengl-core-option.sh")
+    chmod 0755, bin/"add-opengl-core-option"
+
     # Make all scripts executable
     chmod 0755, bin/"compile-qemu-virgl"
     chmod 0755, bin/"install-qemu-deps"
     chmod 0755, bin/"apply-3dfx-patches"
     chmod 0755, bin/"fetch-qemu-version"
     chmod 0755, bin/"qemu-virgl"
-    
-    # Save patches to share directory for the scripts to use
-    share.install resource("qemu-v06-patch").files("qemu-v06.diff")
-    share.install resource("virgl-macos-patch").files("0001-Virglrenderer-on-Windows-and-macOS.patch")
-    share.install resource("qemu-sdl-patch").files("0001-Virgil3D-with-SDL2-OpenGL.patch")
-    share.install resource("glsl-patch").files("0002-Virgil3D-macOS-GLSL-version.patch")
-    share.install resource("egl-optional-patch").files("egl-optional.patch")
+
+    # Append DYLD_LIBRARY_PATH for runtime
+    ENV.append_path "DYLD_LIBRARY_PATH", "#{lib}/qemu-virgl"
   end
 
   def caveats
@@ -543,7 +578,7 @@ class QemuVirglDeps < Formula
     assert_predicate bin/"apply-headers-patch", :executable? if build.with? "opengl-core"
 
     # Verify pkg-config works
-    ENV["PKG_CONFIG_PATH"] = "#{lib}/qemu-virgl/pkgconfig:#{ENV["PKG_CONFIG_PATH"]}"
+    ENV.prepend_path "PKG_CONFIG_PATH", "#{lib}/qemu-virgl/pkgconfig"
     system "pkg-config", "--exists", "virglrenderer"
     assert_equal 0, $CHILD_STATUS.exitstatus
 
@@ -567,6 +602,8 @@ class QemuVirglDeps < Formula
 
     system ENV.cc, "test.c", "-I#{include}/qemu-virgl/virgl",
            "-L#{lib}/qemu-virgl", "-lvirglrenderer", "-o", "test"
+    # Ensure test can find the runtime libraries
+    ENV.append_path "DYLD_LIBRARY_PATH", "#{lib}/qemu-virgl"
     system "./test"
   end
 end

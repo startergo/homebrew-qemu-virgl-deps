@@ -58,6 +58,7 @@ if [ -f "meson.build" ]; then
     sed -i.bak "${EGL_CHECK_LINE}s/if cc.has_header/if (not need_egl) or cc.has_header/" meson.build
     
     echo "Applied EGL optional patch to meson.build"
+    echo "Successfully added OpenGL Core option to meson.build"
   else
     echo "ERROR: Could not find EGL header check in meson.build"
     exit 1
@@ -66,6 +67,28 @@ else
   echo "ERROR: meson.build not found!"
   exit 1
 fi
+
+if build.with? "opengl-core"
+  (bin/"apply-headers-patch").write <<~EOS
+    #!/bin/bash
+    set -e
+    
+    # Script to apply headers patch for OpenGL Core profile
+    QEMU_SRC="$1"
+    if [ -z "$QEMU_SRC" ]; then
+      echo "Usage: $0 <path-to-qemu-source>"
+      exit 1
+    fi
+    
+    cd "$QEMU_SRC"
+    
+    # Apply EGL optional patch for OpenGL Core
+    patch -p1 < "#{opt_prefix}/share/qemu-virgl-deps/egl-optional.patch" || echo "Patch may have already been applied"
+    
+    echo "Headers patch applied successfully."
+  EOS
+  chmod 0755, bin/"apply-headers-patch"
+end
 
 # Apply EGL optional patch
 patch -p1 < "#{opt_share}/qemu-virgl-deps/egl-optional.patch" || echo "Patch may have already been applied"

@@ -130,12 +130,20 @@ fi
 # Change directory to the QEMU source and run configure with required options for Virgl support.
 cd "$QEMU_SRC"
 
+if [ "#{build.with?("opengl-core") ? "true" : "false"}" = "true" ]; then
+  echo "Configuring with OpenGL Core support"
+  # Add the opengl_core option to QEMU's meson_options.txt
+  add-opengl-core-option "$QEMU_SRC"
+  # Add the meson option for OpenGL Core
+  configure_flags="--meson-option=opengl_core=true"
+fi
+
 ../configure --prefix=/usr/local \
   --enable-opengl \
   --enable-virglrenderer \
-  --extra-cflags="-I$QEMU_INCLUDE_DIR" \
-  --extra-ldflags="-L$QEMU_LIB_DIR" \
-  $configure_flags "$@"
+  --extra-cflags="-I#{opt_include}/qemu-virgl" \
+  --extra-ldflags="-L#{opt_lib}/qemu-virgl" \
+  $configure_flags
 
 if [ $? -ne 0 ]; then
   echo "Configuration failed. Please check error messages above."
@@ -163,3 +171,43 @@ else
   echo "  gl=core - Enable OpenGL.framework. May be unstable."
   echo "  gl=es   - Enable ANGLE. Stable and fast. (Recommended)"
 fi
+
+# Update the compile-qemu-virgl script to include OpenGL Core option
+(bin/"compile-qemu-virgl").write <<~EOS
+  #!/bin/bash
+  set -e
+
+  # Script to compile QEMU with virgl support
+  QEMU_SRC="$1"
+  if [ -z "$QEMU_SRC" ]; then
+    echo "Usage: $0 <path-to-qemu-source>"
+    exit 1
+  fi
+
+  cd "$QEMU_SRC"
+  mkdir -p build
+  cd build
+
+  # Set up environment
+  export PKG_CONFIG_PATH="#{opt_lib}/qemu-virgl/pkgconfig:$PKG_CONFIG_PATH"
+  
+  # Determine if we're using OpenGL Core
+  configure_flags=""
+  if [ "#{build.with?("opengl-core") ? "true" : "false"}" = "true" ]; then
+    configure_flags="$configure_flags --meson-option=opengl_core=true"
+    echo "Configuring with OpenGL Core support"
+    
+    # Add OpenGL Core option to QEMU's meson_options.txt
+    add-opengl-core-option "$QEMU_SRC"
+  fi
+  
+  # Configure with appropriate options
+  ../configure --prefix=/usr/local \\
+    --enable-opengl \\
+    --enable-virglrenderer \\
+    --extra-cflags="-I#{opt_include}/qemu-virgl" \\
+    --extra-ldflags="-L#{opt_lib}/qemu-virgl" \\
+    $configure_flags
+
+  echo "QEMU configured successfully. Now run 'make -j$(sysctl -n hw.ncpu)' to build."
+EOS
