@@ -1,4 +1,4 @@
-#!/bin/bash
+  #!/bin/bash
   set -e
 
   # Script to compile QEMU with virgl support
@@ -18,24 +18,28 @@
   cd "$QEMU_SRC"
   
   # Check if we should use OpenGL Core
-  if [ -f "$HOMEBREW_PREFIX/bin/apply-headers-patch" ]; then
+  if [ -f "$HOMEBREW_PREFIX/bin/add-opengl-core-option" ]; then
     echo "===== Adding OpenGL Core option to QEMU meson build ====="
     "$HOMEBREW_PREFIX/bin/add-opengl-core-option" "$QEMU_SRC"
     
     echo "===== Applying EGL headers patch for OpenGL Core ====="
     # First verify the patch exists
-    if [ -f "$PATCH_DIR/egl-optional.patch" ]; then
-      echo "Found patch at $PATCH_DIR/egl-optional.patch"
-      # Apply patch directly instead of calling the script
-      patch -p1 -i "$PATCH_DIR/egl-optional.patch" || echo "Patch may have already been applied"
+    EGL_PATCH="$PATCH_DIR/egl-optional.patch"
+    if [ -f "$EGL_PATCH" ]; then
+      echo "Found patch at $EGL_PATCH"
+      # Apply patch with more detailed output
+      patch -p1 --verbose -i "$EGL_PATCH" || {
+        echo "WARNING: Patch did not apply cleanly, it may already be applied"
+        echo "Continuing with build..."
+      }
     else
-      echo "WARNING: Could not find patch at $PATCH_DIR/egl-optional.patch"
+      echo "ERROR: Could not find patch at $EGL_PATCH"
       echo "Contents of $PATCH_DIR:"
-      ls -la "$PATCH_DIR"
+      ls -la "$PATCH_DIR" || echo "Directory not found!"
       exit 1
     fi
     
-    # Verify the option was added
+    # Verify the option was added to meson_options.txt
     if grep -q "option('opengl_core'" meson_options.txt; then
       echo "✓ Successfully added OpenGL Core option"
       OPENGL_FLAGS="--meson-option=opengl_core=true"

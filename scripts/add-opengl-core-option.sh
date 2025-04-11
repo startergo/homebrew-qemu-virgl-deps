@@ -27,15 +27,13 @@ if ! grep -q "option('opengl_core'" meson_options.txt; then
     # Insert the option after the OpenGL option - we need to find the line with the description
     DESCRIPTION_LINE=$((OPENGL_LINE + 1))
     
-    # Use a temp file to avoid issues with in-place editing
+    # Make a backup of the original file
     cp meson_options.txt meson_options.txt.bak
     
-    # Add the new option
-    sed "${DESCRIPTION_LINE}a\\
-option('opengl_core', type: 'boolean', value: false,\\
-       description: 'Use OpenGL Core profile instead of EGL')" \
-       meson_options.txt.bak > meson_options.txt
-       
+    # Add the new option using a simple insertion technique that works on both Linux and macOS
+    awk -v line=$DESCRIPTION_LINE 'NR==line {print; print "option('\''opengl_core'\'', type: '\''boolean'\'', value: false,\\n       description: '\''Use OpenGL Core profile instead of EGL'\'')"}; {print}' meson_options.txt.bak > meson_options.txt.new
+    mv meson_options.txt.new meson_options.txt
+    
     echo "Successfully added OpenGL Core option to meson_options.txt"
   else
     echo "ERROR: Could not find OpenGL option in meson_options.txt"
@@ -46,24 +44,29 @@ else
 fi
 
 # Modify meson.build to handle the OpenGL Core option
-if grep -q "need_egl = not get_option('opengl_core')" meson.build; then
-  echo "OpenGL Core option already processed in meson.build"
-else
-  # Back up the original file
+if ! grep -q "need_egl = not get_option('opengl_core')" meson.build; then
+  # Make a backup of the original file
   cp meson.build meson.build.bak
   
-  # Add the conditional EGL support
-  LINE_NUM=$(grep -n "if cc.has_header('epoxy/egl.h'" meson.build | cut -d':' -f1)
-  if [ -n "$LINE_NUM" ]; then
-    sed -i.tmp "${LINE_NUM}i\\
-# Make EGL headers optional when using OpenGL Core\\
-need_egl = not get_option('opengl_core')\\
-" meson.build
-    sed -i.tmp "s/if cc.has_header('epoxy\/egl.h'/if (not need_egl) or cc.has_header('epoxy\/egl.h'/g" meson.build
+  # Find the line with EGL header check
+  if grep -q "cc.has_header('epoxy/egl.h'" meson.build; then
+    # Using awk for better compatibility with different sed versions
+    awk '/cc.has_header.*epoxy\\/egl.h/ { 
+      print "# Make EGL headers optional when using OpenGL Core"; 
+      print "need_egl = not get_option('\''opengl_core'\'')"; 
+      print ""; 
+      gsub(/if cc.has_header/, "if (not need_egl) or cc.has_header"); 
+    } 
+    { print }' meson.build.bak > meson.build.new
+    
+    mv meson.build.new meson.build
     echo "Successfully updated meson.build for OpenGL Core support"
   else
     echo "WARNING: Could not find EGL header check in meson.build"
+    echo "Manual modification may be required."
   fi
+else
+  echo "OpenGL Core option already processed in meson.build"
 fi
 
 echo "OpenGL Core option setup complete."
