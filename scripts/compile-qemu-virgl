@@ -11,10 +11,6 @@
   # Find the path to the Homebrew prefix by looking at this script's location
   SCRIPT_PATH="$(dirname "$(realpath "$0")")"
   HOMEBREW_PREFIX="$(dirname "$(dirname "$SCRIPT_PATH")")"
-  
-  # Derive paths for binaries and patches
-  ADD_OPTION="$HOMEBREW_PREFIX/bin/add-opengl-core-option"
-  APPLY_PATCH="$HOMEBREW_PREFIX/bin/apply-headers-patch"
   QEMU_VIRGL_LIB="$HOMEBREW_PREFIX/lib/qemu-virgl"
   QEMU_VIRGL_INCLUDE="$HOMEBREW_PREFIX/include/qemu-virgl"
   PATCH_DIR="$HOMEBREW_PREFIX/share/qemu-virgl-deps"
@@ -22,12 +18,22 @@
   cd "$QEMU_SRC"
   
   # Check if we should use OpenGL Core
-  if [ -f "$ADD_OPTION" ] && [ -f "$APPLY_PATCH" ]; then
+  if [ -f "$HOMEBREW_PREFIX/bin/apply-headers-patch" ]; then
     echo "===== Adding OpenGL Core option to QEMU meson build ====="
-    "$ADD_OPTION" "$QEMU_SRC"
+    "$HOMEBREW_PREFIX/bin/add-opengl-core-option" "$QEMU_SRC"
     
     echo "===== Applying EGL headers patch for OpenGL Core ====="
-    "$APPLY_PATCH" "$QEMU_SRC"
+    # First verify the patch exists
+    if [ -f "$PATCH_DIR/egl-optional.patch" ]; then
+      echo "Found patch at $PATCH_DIR/egl-optional.patch"
+      # Apply patch directly instead of calling the script
+      patch -p1 -i "$PATCH_DIR/egl-optional.patch" || echo "Patch may have already been applied"
+    else
+      echo "WARNING: Could not find patch at $PATCH_DIR/egl-optional.patch"
+      echo "Contents of $PATCH_DIR:"
+      ls -la "$PATCH_DIR"
+      exit 1
+    fi
     
     # Verify the option was added
     if grep -q "option('opengl_core'" meson_options.txt; then
@@ -57,4 +63,4 @@
     $OPENGL_FLAGS
 
   echo "===== QEMU configured successfully ====="
-  echo "Now run: cd build && make -j$(sysctl -n hw.ncpu)"
+  echo "Now run: cd $QEMU_SRC/build && make -j$(sysctl -n hw.ncpu)"
