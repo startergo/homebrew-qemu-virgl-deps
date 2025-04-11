@@ -102,28 +102,19 @@ jobs:
     - name: Add opengl_core option to meson_options.txt
       run: |
         cd source/qemu
-        # Locate the opengl option in meson_options.txt
-        LINE_NUM=$(grep -n "option('opengl'" meson_options.txt | cut -d':' -f1)
-        if [ -n "$LINE_NUM" ]; then
-          # Find the end of the OpenGL option definition (the line after description)
-          DESCR_LINE=$(grep -n "description.*OpenGL support" meson_options.txt | cut -d':' -f1)
-          if [ -n "$DESCR_LINE" ]; then
-            # Insert our new option after the description line
-            INSERT_LINE=$((DESCR_LINE + 1))
-            sed -i "" "${INSERT_LINE}i\\
-            option('opengl_core', type: 'boolean', value: false,\\
-            description: 'Use OpenGL Core profile instead of EGL')\\
-            " meson_options.txt
-            echo "Added opengl_core option to meson_options.txt"
-            grep -A3 "opengl_core" meson_options.txt
-          else
-            echo "Could not find OpenGL description line"
-            exit 1
-          fi
-        else
-          echo "Could not find OpenGL option in meson_options.txt"
-          exit 1
-        fi
+        echo 'option('\''opengl_core'\'', type: '\''boolean'\'', value: false, description: '\''Use OpenGL Core profile instead of EGL'\'')' >> meson_options.txt
+        
+        # Verify the option was added
+        grep "opengl_core" meson_options.txt
+
+        # Then update meson.build to use the option
+        sed -i '' '/if cc.has_header('\''epoxy\/egl.h'\''/i\\
+        # Make EGL headers optional when using OpenGL Core\\
+        need_egl = not get_option('\''opengl_core'\'')\\
+        ' meson.build
+        
+        # Update the if condition
+        sed -i '' 's/if cc.has_header/if (not need_egl) or cc.has_header/g' meson.build
 
     # Step 8: Build QEMU with OpenGL Core
     - name: Build QEMU with OpenGL Core

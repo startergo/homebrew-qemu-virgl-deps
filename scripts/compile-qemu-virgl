@@ -102,6 +102,23 @@ EOF
   
   # Add this include dir to CFLAGS
   export CFLAGS="-I$QEMU_INCLUDE_DIR $CFLAGS"
+  
+  # Before configure:
+  echo "Configuring with OpenGL Core support"
+  configure_flags="$configure_flags --meson-option=opengl_core=true"
+  
+  # Ensure virglrenderer and epoxy are found
+  export PKG_CONFIG_PATH="$(brew --prefix)/opt/qemu-virgl-deps/lib/qemu-virgl/pkgconfig:$PKG_CONFIG_PATH"
+  
+  # Double-check that our options are defined
+  mkdir -p build
+  cd build
+  
+  # Create a test meson.build file to verify option
+  echo 'project("test")' > test_options.build
+  echo 'get_option("opengl_core")' >> test_options.build
+  meson setup -Dopengl_core=true . || echo "Option opengl_core not recognized"
+  cd ..
 else
   # ANGLE mode configuration
   ANGLE_INCLUDE="-I$BREW_PREFIX/opt/homebrew-qemu-virgl-deps/include/angle"

@@ -244,8 +244,9 @@ class QemuVirglDeps < Formula
     else
       ohai "Building libepoxy with ANGLE support"
       resource("libepoxy-angle").stage do
-        # Set CFLAGS for ANGLE header
-        ENV.append "CFLAGS", "-I#{HOMEBREW_PREFIX}/include -F#{sdk_path}/System/Library/Frameworks"
+        # Set environment variables for ANGLE headers
+        ENV.append "CFLAGS", "-I#{HOMEBREW_PREFIX}/include -F#{MacOS.sdk_path}/System/Library/Frameworks"
+        ENV.append "CPPFLAGS", "-I#{HOMEBREW_PREFIX}/include"
         
         # Configure and build
         mkdir "build" do
@@ -298,6 +299,9 @@ class QemuVirglDeps < Formula
     else
       ohai "Building virglrenderer with ANGLE support"
       resource("virglrenderer-angle").stage do
+        # Set up environment
+        ENV.append "PKG_CONFIG_PATH", "#{libdir}/pkgconfig:#{ENV["PKG_CONFIG_PATH"]}"
+        
         # Configure and build
         mkdir "build" do
           system "meson", "setup", *std_meson_args,
@@ -306,7 +310,6 @@ class QemuVirglDeps < Formula
                  "--includedir=#{includedir}",
                  "-Dminigbm=disabled",
                  "-Dplatforms=egl",
-                 "-Dc_args=-I#{includedir}/epoxy",
                  ".."
           system "ninja", "-v"
           system "ninja", "install", "-v"
