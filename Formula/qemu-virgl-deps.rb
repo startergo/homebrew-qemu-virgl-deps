@@ -79,6 +79,20 @@ class QemuVirglDeps < Formula
     sha256 "9d1c63a3a941b1344007a7a773baaacf651d416b8ed7227eaacf309ea23f66ec"
   end
 
+  resource "virglrenderer-core" do
+    url "https://gitlab.freedesktop.org/virgl/virglrenderer.git",
+        tag: "1.1.0",
+        using: :git
+    version "1.1.0"
+  end
+
+  resource "virglrenderer-angle" do
+    url "https://github.com/akihikodaki/virglrenderer.git",
+        branch: "macos",
+        using: :git
+    version "1.1.0-angle"
+  end
+
   def install
     # 1. Create directories first
     mkdir_p "#{lib}/pkgconfig"
@@ -195,6 +209,48 @@ class QemuVirglDeps < Formula
     EOS
 
     ln_sf Formula["erofs-utils"].opt_lib/"pkgconfig/erofs.pc", "#{libdir}/pkgconfig/" if build.with? "erofs-utils"
+
+    # Add this after the epoxy installation logic
+
+    # Build and install the appropriate virglrenderer version
+    if build.with? "opengl-core"
+      ohai "Building virglrenderer with OpenGL Core support"
+      resource("virglrenderer-core").stage do
+        # Apply virgl-macos patch
+        system "patch", "-p1", "-i", "#{buildpath}/0001-Virglrenderer-on-Windows-and-macOS.patch"
+        
+        # Configure and build
+        mkdir "build" do
+          system "meson", "setup", *std_meson_args,
+                 "--prefix=#{prefix}",
+                 "--libdir=#{libdir}",
+                 "--includedir=#{includedir}",
+                 "-Dminigbm=disabled",
+                 "-Dplatforms=egl,glx",
+                 "-Dc_args=-I#{includedir}/epoxy",
+                 ".."
+          system "ninja", "-v"
+          system "ninja", "install", "-v"
+        end
+      end
+    else
+      ohai "Building virglrenderer with ANGLE support"
+      resource("virglrenderer-angle").stage do
+        # Configure and build
+        mkdir "build" do
+          system "meson", "setup", *std_meson_args,
+                 "--prefix=#{prefix}",
+                 "--libdir=#{libdir}",
+                 "--includedir=#{includedir}",
+                 "-Dminigbm=disabled",
+                 "-Dplatforms=egl",
+                 "-Dc_args=-I#{includedir}/epoxy",
+                 ".."
+          system "ninja", "-v"
+          system "ninja", "install", "-v"
+        end
+      end
+    end
 
     # Create scripts directly in the formula
     (bin/"compile-qemu-virgl").write <<~EOS

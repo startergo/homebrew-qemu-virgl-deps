@@ -81,7 +81,7 @@ jobs:
           # Insert the need_egl variable before the test
           sed -i "" "${LINE_NUM}i\\
           # Make EGL headers optional when using OpenGL Core\\
-          need_egl = not get_option('opengl_core').enabled()\\
+          need_egl = not get_option('opengl_core')\\
           " meson.build
           # Modify the if condition
           sed -i "" "s/if cc.has_header/if (not need_egl) or cc.has_header/g" meson.build
