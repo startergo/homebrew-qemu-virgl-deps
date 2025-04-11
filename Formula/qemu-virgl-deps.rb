@@ -212,7 +212,14 @@ class QemuVirglDeps < Formula
 
     # Extract all patches first to a temporary location before building virglrenderer
     mkdir_p buildpath/"patches"
-    resource("virgl-macos-patch").stage { cp Dir["*"], buildpath/"patches/" }
+
+    # Extract resource with explicit file copying for better error detection
+    resource("virgl-macos-patch").stage do
+      cp Dir["*"], buildpath/"patches/"
+      # Verify the file was copied
+      system "ls", "-la", buildpath/"patches/"
+    end
+
     resource("qemu-v06-patch").stage { cp Dir["*"], buildpath/"patches/" }
     resource("qemu-sdl-patch").stage { cp Dir["*"], buildpath/"patches/" }
     resource("glsl-patch").stage { cp Dir["*"], buildpath/"patches/" }
@@ -261,21 +268,17 @@ class QemuVirglDeps < Formula
     if build.with? "opengl-core"
       ohai "Building virglrenderer with OpenGL Core support"
       resource("virglrenderer-core").stage do
-        # Apply virgl-macos patch from buildpath - fix the path issue
-        patch_file = "#{buildpath}/patches/0001-Virglrenderer-on-Windows-and-macOS.patch"
+        # Apply virgl-macos patch with direct path to resource file if buildpath fails
+        patch_file = buildpath/"patches/0001-Virglrenderer-on-Windows-and-macOS.patch"
         
-        ohai "Verifying patch file exists at: #{patch_file}"
-        if File.exist?(patch_file)
-          ohai "Found patch file, applying..."
-          # Apply with full path and more verbose output
-          system "patch", "-p1", "--verbose", "-i", patch_file
+        unless File.exist?(patch_file)
+          # Fall back to directly using the resource
+          resource("virgl-macos-patch").stage do
+            patch_file = Pathname.pwd/"0001-Virglrenderer-on-Windows-and-macOS.patch"
+            system "patch", "-p1", "--verbose", "-i", patch_file
+          end
         else
-          ohai "ERROR: Patch file not found at #{patch_file}"
-          ohai "Directory contents:"
-          system "ls", "-la", "#{buildpath}/patches/"
-          ohai "Trying to find patch file in other locations..."
-          system "find", buildpath.to_s, "-name", "*Virglrenderer*.patch"
-          raise "Cannot find required patch file"
+          system "patch", "-p1", "--verbose", "-i", patch_file
         end
         
         # Configure and build

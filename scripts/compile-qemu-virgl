@@ -110,8 +110,17 @@ fi
 # Change directory to the QEMU source and run configure with required options for Virgl support.
 cd "$QEMU_SRC"
 
-./configure --target-list=i386-softmmu,x86_64-softmmu,aarch64-softmmu \
-            --enable-opengl --enable-virglrenderer --enable-sdl "$@"
+configure_flags=""
+if [ "$OPENGL_CORE" = "true" ]; then
+  configure_flags="$configure_flags --meson-option=opengl_core=true"
+fi
+
+../configure --prefix=/usr/local \
+  --enable-opengl \
+  --enable-virglrenderer \
+  --extra-cflags="-I$BREW_PREFIX/opt/qemu-virgl-deps/include/qemu-virgl" \
+  --extra-ldflags="-L$BREW_PREFIX/opt/qemu-virgl-deps/lib/qemu-virgl" \
+  $configure_flags "$@"
 
 if [ $? -ne 0 ]; then
   echo "Configuration failed. Please check error messages above."

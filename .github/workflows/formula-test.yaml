@@ -75,7 +75,13 @@ jobs:
     - name: Apply manual fix for OpenGL Core
       run: |
         cd source/qemu
-        # Identify the line that tests for EGL headers
+        # First add the opengl_core option to meson_options.txt
+        sed -i "" "/option('opengl'.*)/a\\
+        option('opengl_core', type: 'boolean', value: false,\\
+               description: 'Use OpenGL Core profile instead of EGL')\\
+        " meson_options.txt
+        
+        # Then update the meson.build file to use this option
         LINE_NUM=$(grep -n "if cc.has_header('epoxy/egl.h'" meson.build | cut -d':' -f1)
         if [ -n "$LINE_NUM" ]; then
           # Insert the need_egl variable before the test
