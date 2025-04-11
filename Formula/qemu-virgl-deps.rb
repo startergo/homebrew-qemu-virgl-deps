@@ -219,7 +219,7 @@ class QemuVirglDeps < Formula
     resource("virgl-macos-patch").stage { mv "0001-Virglrenderer-on-Windows-and-macOS.patch", "#{share}/qemu-virgl-deps/" }
     resource("qemu-sdl-patch").stage { mv "0001-Virgil3D-with-SDL2-OpenGL.patch", "#{share}/qemu-virgl-deps/" }
     resource("glsl-patch").stage { mv "0002-Virgil3D-macOS-GLSL-version.patch", "#{share}/qemu-virgl-deps/" }
-    resource("egl-optional-patch").stage { mv "egl-optional.patch", "#{share}/qemu-virgl-deps/" }
+    resource("egl-optional-patch").stage { cp "egl-optional.patch", "#{share}/qemu-virgl-deps/" }
 
     # Install egl-optional.patch to share directory
     (share/"qemu-virgl-deps").install "patches/egl-optional.patch"
@@ -442,7 +442,7 @@ class QemuVirglDeps < Formula
       # Check if there are hidden files and copy them too
       if [ -n "$(ls -A "qemu-${VERSION}/" | grep '^\\.')" ]; then
         cp -R "qemu-${VERSION}"/.[!.]* . 2>/dev/null || true
-      fi
+      end
       
       # Remove the source directory with force
       rm -rf "qemu-${VERSION}"
