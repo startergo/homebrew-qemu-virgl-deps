@@ -305,7 +305,33 @@ class QemuVirglDeps < Formula
         # Ensure virglrenderer can find the necessary headers
         ENV.append "CFLAGS", "-I#{includedir}"
         ENV.append "CPPFLAGS", "-I#{includedir}"
-        
+
+        # Add inside the virglrenderer-angle stage block:
+        ohai "Building virglrenderer for ANGLE..."
+        ohai "PKG_CONFIG_PATH=#{ENV["PKG_CONFIG_PATH"]}"
+        ohai "CFLAGS=#{ENV["CFLAGS"]}"
+        ohai "CPPFLAGS=#{ENV["CPPFLAGS"]}"
+
+        # Test for essential libraries
+        system "pkg-config", "--exists", "epoxy" and ohai "Found epoxy via pkg-config"
+        system "pkg-config", "--exists", "egl" and ohai "Found EGL via pkg-config"
+
+        # Also verify ANGLE libraries exist
+        ohai "ANGLE libraries present:"
+        system "ls", "-la", "#{libdir}/libEGL.dylib"
+        system "ls", "-la", "#{libdir}/libGLESv2.dylib"
+
+        # Try using absolute paths for meson:
+        system "meson", "setup", *std_meson_args,
+               "--prefix=#{prefix}",
+               "--libdir=#{libdir}",
+               "--includedir=#{includedir}",
+               "-Dminigbm=disabled", 
+               "-Dplatforms=egl",
+               "-Depoxy-egl=#{libdir}/libEGL.dylib",
+               "-Depoxy-glesv2=#{libdir}/libGLESv2.dylib",
+               ".."
+
         mkdir "build" do
           # Update pkg-config path to find our local EGL files
           ENV.append_path "PKG_CONFIG_PATH", "#{libdir}/pkgconfig"

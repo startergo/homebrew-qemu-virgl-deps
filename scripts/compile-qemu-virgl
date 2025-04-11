@@ -1,180 +1,4 @@
-#!/bin/bash
-
-# Check if source directory is provided
-if [ -z "$1" ]; then
-  echo "Error: Please specify the QEMU source directory"
-  echo "Usage: compile-qemu-virgl /path/to/qemu-src [additional configure options]"
-  exit 1
-fi
-
-QEMU_SRC="$1"
-shift
-
-if [ ! -d "$QEMU_SRC" ]; then
-  echo "Error: QEMU source directory not found: $QEMU_SRC"
-  exit 1
-fi
-
-# Get SDK path for framework headers
-SDK_PATH=$(xcrun --show-sdk-path)
-
-# Get Homebrew prefix dynamically
-BREW_PREFIX=$(brew --prefix)
-
-# Build mode: if BUILD_OPENGL_CORE is set to "1", we disable Angle support and hence omit the include path for epoxy/egl.h.
-if [ "$BUILD_OPENGL_CORE" == "1" ]; then
-  ANGLE_INCLUDE=""
-else
-  ANGLE_INCLUDE="-I$BREW_PREFIX/opt/homebrew-qemu-virgl-deps/include/angle"
-fi
-
-# Setup PKG_CONFIG_PATH for QEMU Virgl dependencies
-export PKG_CONFIG_PATH="$BREW_PREFIX/opt/qemu-virgl-deps/lib/pkgconfig:$PKG_CONFIG_PATH"
-
-# Add this before running ../configure
-# Set PKG_CONFIG_PATH to find libepoxy without EGL
-export PKG_CONFIG_PATH="$BREW_PREFIX/opt/qemu-virgl-deps/lib/pkgconfig:$PKG_CONFIG_PATH"
-# Explicitly set CFLAGS to include the correct dirs but exclude EGL
-export CFLAGS="-DGL_SILENCE_DEPRECATION -I$BREW_PREFIX/opt/qemu-virgl-deps/include/epoxy $CFLAGS"
-
-# Construct CFLAGS with the necessary include paths.
-# In OpenGL Core mode, we do not add the angle include directory
-export CFLAGS="-F$SDK_PATH/System/Library/Frameworks \
--I$BREW_PREFIX/opt/homebrew-qemu-virgl-deps/include/epoxy \
--I$BREW_PREFIX/opt/homebrew-qemu-virgl-deps/include/virgl \
-$ANGLE_INCLUDE $CFLAGS"
-
-# Setup LDFLAGS with the necessary library paths.
-export LDFLAGS="-F$SDK_PATH/System/Library/Frameworks -L$BREW_PREFIX/opt/qemu-virgl-deps/lib $LDFLAGS"
-
-export OBJCFLAGS="-F$SDK_PATH/System/Library/Frameworks $OBJCFLAGS"
-
-echo "Configuring QEMU with Virgl support..."
-echo "Using SDK path: $SDK_PATH"
-
-# If OpenGL Core build is enabled, apply the EGL patch.
-# (The patch adjusts egl-helpers.h so QEMU can build without epoxy/egl.h.)
-if [ "$BUILD_OPENGL_CORE" == "1" ]; then
-  echo "OpenGL Core build enabled. Applying EGL patch..."
-  # Change to the directory where this script is located, then use an absolute path.
-  SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-  PATCH_SCRIPT="$BREW_PREFIX/opt/qemu-virgl-deps/bin/apply-egl-patch"
-  if [ ! -f "$PATCH_SCRIPT" ]; then
-    echo "Error: Patch script not found at $PATCH_SCRIPT"
-    exit 1
-  fi
-  if [ ! -x "$PATCH_SCRIPT" ]; then
-    echo "Setting execute permission on $PATCH_SCRIPT"
-    chmod +x "$PATCH_SCRIPT"
-  fi
-  "$PATCH_SCRIPT"
-fi
-
-# Initialize configure_flags
-configure_flags=""
-
-# Just use one variable (OPENGL_CORE) and standardize on boolean values
-if [ "$OPENGL_CORE" = "true" ]; then
-  # OpenGL Core mode configuration
-
-  # Set environment variable for OpenGL Core build mode
-  export BUILD_OPENGL_CORE=1
-  
-  # Disable EGL in QEMU configuration
-  CONFIG_FLAGS="$CONFIG_FLAGS --disable-egl"
-  
-  # Create a stub epoxy/egl.h if it doesn't exist
-  QEMU_INCLUDE_DIR="$QEMU_SRC/include"
-  mkdir -p "$QEMU_INCLUDE_DIR/epoxy"
-  if [ ! -f "$QEMU_INCLUDE_DIR/epoxy/egl.h" ]; then
-    echo "Creating stub EGL header to satisfy build dependencies..."
-    cat > "$QEMU_INCLUDE_DIR/epoxy/egl.h" << 'EOF'
-/* Stub EGL header for OpenGL Core build */
-#ifndef EPOXY_EGL_H
-#define EPOXY_EGL_H
-typedef int EGLint;
-typedef void *EGLDisplay;
-typedef void *EGLSurface;
-typedef void *EGLContext;
-typedef void *EGLConfig;
-#define EGL_FALSE 0
-#define EGL_TRUE 1
-#endif
-EOF
-  fi
-  
-  # Add this include dir to CFLAGS
-  export CFLAGS="-I$QEMU_INCLUDE_DIR $CFLAGS"
-  
-  # Before configure:
-  echo "Configuring with OpenGL Core support"
-  configure_flags="$configure_flags --meson-option=opengl_core=true"
-  
-  # Ensure virglrenderer and epoxy are found
-  export PKG_CONFIG_PATH="$(brew --prefix)/opt/qemu-virgl-deps/lib/qemu-virgl/pkgconfig:$PKG_CONFIG_PATH"
-  
-  # Double-check that our options are defined
-  mkdir -p build
-  cd build
-  
-  # Create a test meson.build file to verify option
-  echo 'project("test")' > test_options.build
-  echo 'get_option("opengl_core")' >> test_options.build
-  meson setup -Dopengl_core=true . || echo "Option opengl_core not recognized"
-  cd ..
-else
-  # ANGLE mode configuration
-  ANGLE_INCLUDE="-I$BREW_PREFIX/opt/homebrew-qemu-virgl-deps/include/angle"
-fi
-
-# Change directory to the QEMU source and run configure with required options for Virgl support.
-cd "$QEMU_SRC"
-
-if [ "#{build.with?("opengl-core") ? "true" : "false"}" = "true" ]; then
-  echo "Configuring with OpenGL Core support"
-  # Add the opengl_core option to QEMU's meson_options.txt
-  add-opengl-core-option "$QEMU_SRC"
-  # Add the meson option for OpenGL Core
-  configure_flags="--meson-option=opengl_core=true"
-fi
-
-../configure --prefix=/usr/local \
-  --enable-opengl \
-  --enable-virglrenderer \
-  --extra-cflags="-I#{opt_include}/qemu-virgl" \
-  --extra-ldflags="-L#{opt_lib}/qemu-virgl" \
-  $configure_flags
-
-if [ $? -ne 0 ]; then
-  echo "Configuration failed. Please check error messages above."
-  exit 1
-fi
-
-echo ""
-echo "Configuration successful! To build QEMU, run:"
-echo "cd $QEMU_SRC && make -j$(sysctl -n hw.ncpu)"
-echo ""
-
-if [ "$BUILD_OPENGL_CORE" == "1" ]; then
-  echo "After building, you can run QEMU with OpenGL Core backend (kjliew's approach):"
-  echo "qemu-system-x86_64 -display sdl,gl=core [other options]"
-  echo ""
-  echo "----------------------------------------------"
-  echo "IMPORTANT: You are building with the OpenGL Core backend."
-  echo "Before you build QEMU further, please run the EGL patch (if not already done):"
-  echo "  apply-egl-patch"
-  echo "This will patch the egl-helpers.h file for proper OpenGL Core support."
-  echo "----------------------------------------------"
-else
-  echo "After building, you can run QEMU with different GL backends:"
-  echo "  gl=off  - Disable Virgil 3D GPU. Most stable but may be laggy."
-  echo "  gl=core - Enable OpenGL.framework. May be unstable."
-  echo "  gl=es   - Enable ANGLE. Stable and fast. (Recommended)"
-fi
-
-# Update the compile-qemu-virgl script to include OpenGL Core option
-(bin/"compile-qemu-virgl").write <<~EOS
-  #!/bin/bash
+ #!/bin/bash
   set -e
 
   # Script to compile QEMU with virgl support
@@ -185,20 +9,28 @@ fi
   fi
 
   cd "$QEMU_SRC"
+  
+  # Apply patches if needed for OpenGL Core
+  if [ "#{build.with?("opengl-core") ? "true" : "false"}" = "true" ]; then
+    echo "Adding OpenGL Core option to QEMU..."
+    add-opengl-core-option "$QEMU_SRC"
+    
+    echo "Applying EGL optional headers patch..."
+    apply-headers-patch "$QEMU_SRC"
+  fi
+
   mkdir -p build
   cd build
 
   # Set up environment
   export PKG_CONFIG_PATH="#{opt_lib}/qemu-virgl/pkgconfig:$PKG_CONFIG_PATH"
   
-  # Determine if we're using OpenGL Core
-  configure_flags=""
+  # Determine configure flags based on build type
   if [ "#{build.with?("opengl-core") ? "true" : "false"}" = "true" ]; then
-    configure_flags="$configure_flags --meson-option=opengl_core=true"
-    echo "Configuring with OpenGL Core support"
-    
-    # Add OpenGL Core option to QEMU's meson_options.txt
-    add-opengl-core-option "$QEMU_SRC"
+    echo "Configuring QEMU with OpenGL Core support..."
+    configure_flags="--meson-option=opengl_core=true"
+  else
+    configure_flags=""
   fi
   
   # Configure with appropriate options
@@ -210,4 +42,3 @@ fi
     $configure_flags
 
   echo "QEMU configured successfully. Now run 'make -j$(sysctl -n hw.ncpu)' to build."
-EOS
