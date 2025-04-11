@@ -92,6 +92,33 @@ jobs:
           exit 1
         fi
 
+    # Step 7.2: Add opengl_core option to meson_options.txt
+    - name: Add opengl_core option to meson_options.txt
+      run: |
+        cd source/qemu
+        # Locate the opengl option in meson_options.txt
+        LINE_NUM=$(grep -n "option('opengl'" meson_options.txt | cut -d':' -f1)
+        if [ -n "$LINE_NUM" ]; then
+          # Find the end of the OpenGL option definition (the line after description)
+          DESCR_LINE=$(grep -n "description.*OpenGL support" meson_options.txt | cut -d':' -f1)
+          if [ -n "$DESCR_LINE" ]; then
+            # Insert our new option after the description line
+            INSERT_LINE=$((DESCR_LINE + 1))
+            sed -i "" "${INSERT_LINE}i\\
+            option('opengl_core', type: 'boolean', value: false,\\
+            description: 'Use OpenGL Core profile instead of EGL')\\
+            " meson_options.txt
+            echo "Added opengl_core option to meson_options.txt"
+            grep -A3 "opengl_core" meson_options.txt
+          else
+            echo "Could not find OpenGL description line"
+            exit 1
+          fi
+        else
+          echo "Could not find OpenGL option in meson_options.txt"
+          exit 1
+        fi
+
     # Step 8: Build QEMU with OpenGL Core
     - name: Build QEMU with OpenGL Core
       run: |
