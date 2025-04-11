@@ -218,12 +218,65 @@ class QemuVirglDeps < Formula
     resource("glsl-patch").stage { cp Dir["*"], buildpath/"patches/" }
     resource("egl-optional-patch").stage { cp Dir["*"], buildpath/"patches/" }
 
+    # Now build and install the appropriate libepoxy version
+    if build.with? "opengl-core"
+      ohai "Building libepoxy with OpenGL Core support"
+      resource("libepoxy").stage do
+        # Configure and build
+        mkdir "build" do
+          system "meson", "setup", *std_meson_args,
+                 "--prefix=#{prefix}",
+                 "--libdir=#{libdir}",
+                 "--includedir=#{includedir}",
+                 "-Degl=no", "-Dglx=no", "-Dx11=false",
+                 ".."
+          system "ninja", "-v"
+          system "ninja", "install", "-v"
+        end
+      end
+    else
+      ohai "Building libepoxy with ANGLE support"
+      resource("libepoxy-angle").stage do
+        # Set CFLAGS for ANGLE header
+        ENV.append "CFLAGS", "-I#{HOMEBREW_PREFIX}/include -F#{sdk_path}/System/Library/Frameworks"
+        
+        # Configure and build
+        mkdir "build" do
+          system "meson", "setup", *std_meson_args,
+                 "--prefix=#{prefix}",
+                 "--libdir=#{libdir}",
+                 "--includedir=#{includedir}",
+                 "-Degl=yes", "-Dglx=no", "-Dx11=false",
+                 ".."
+          system "ninja", "-v"
+          system "ninja", "install", "-v"
+        end
+      end
+    end
+
+    # After building libepoxy, ensure the pkg-config path is updated
+    ENV.append_path "PKG_CONFIG_PATH", "#{libdir}/pkgconfig"
+
     # Build and install the appropriate virglrenderer version
     if build.with? "opengl-core"
       ohai "Building virglrenderer with OpenGL Core support"
       resource("virglrenderer-core").stage do
-        # Apply virgl-macos patch from buildpath
-        system "patch", "-p1", "-i", "#{buildpath}/patches/0001-Virglrenderer-on-Windows-and-macOS.patch"
+        # Apply virgl-macos patch from buildpath - fix the path issue
+        patch_file = "#{buildpath}/patches/0001-Virglrenderer-on-Windows-and-macOS.patch"
+        
+        ohai "Verifying patch file exists at: #{patch_file}"
+        if File.exist?(patch_file)
+          ohai "Found patch file, applying..."
+          # Apply with full path and more verbose output
+          system "patch", "-p1", "--verbose", "-i", patch_file
+        else
+          ohai "ERROR: Patch file not found at #{patch_file}"
+          ohai "Directory contents:"
+          system "ls", "-la", "#{buildpath}/patches/"
+          ohai "Trying to find patch file in other locations..."
+          system "find", buildpath.to_s, "-name", "*Virglrenderer*.patch"
+          raise "Cannot find required patch file"
+        end
         
         # Configure and build
         mkdir "build" do
@@ -348,7 +401,7 @@ class QemuVirglDeps < Formula
       # Check if there are hidden files and copy them too
       if [ -n "$(ls -A "qemu-${VERSION}/" | grep '^\\.')" ]; then
         cp -R "qemu-${VERSION}"/.[!.]* . 2>/dev/null || true
-      fi
+      end
       
       # Remove the source directory with force
       rm -rf "qemu-${VERSION}"
