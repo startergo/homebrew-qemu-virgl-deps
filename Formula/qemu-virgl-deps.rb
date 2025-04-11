@@ -210,14 +210,20 @@ class QemuVirglDeps < Formula
 
     ln_sf Formula["erofs-utils"].opt_lib/"pkgconfig/erofs.pc", "#{libdir}/pkgconfig/" if build.with? "erofs-utils"
 
-    # Add this after the epoxy installation logic
+    # Extract all patches first to a temporary location before building virglrenderer
+    mkdir_p buildpath/"patches"
+    resource("virgl-macos-patch").stage { cp Dir["*"], buildpath/"patches/" }
+    resource("qemu-v06-patch").stage { cp Dir["*"], buildpath/"patches/" }
+    resource("qemu-sdl-patch").stage { cp Dir["*"], buildpath/"patches/" }
+    resource("glsl-patch").stage { cp Dir["*"], buildpath/"patches/" }
+    resource("egl-optional-patch").stage { cp Dir["*"], buildpath/"patches/" }
 
     # Build and install the appropriate virglrenderer version
     if build.with? "opengl-core"
       ohai "Building virglrenderer with OpenGL Core support"
       resource("virglrenderer-core").stage do
-        # Apply virgl-macos patch
-        system "patch", "-p1", "-i", "#{share}/qemu-virgl-deps/0001-Virglrenderer-on-Windows-and-macOS.patch"
+        # Apply virgl-macos patch from buildpath
+        system "patch", "-p1", "-i", "#{buildpath}/patches/0001-Virglrenderer-on-Windows-and-macOS.patch"
         
         # Configure and build
         mkdir "build" do
@@ -251,6 +257,9 @@ class QemuVirglDeps < Formula
         end
       end
     end
+
+    # After building everything, then copy patches to share directory for script usage
+    share.install Dir["#{buildpath}/patches/*"]
 
     # Create scripts directly in the formula
     (bin/"compile-qemu-virgl").write <<~EOS
