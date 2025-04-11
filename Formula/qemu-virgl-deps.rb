@@ -221,9 +221,6 @@ class QemuVirglDeps < Formula
     resource("glsl-patch").stage { mv "0002-Virgil3D-macOS-GLSL-version.patch", "#{share}/qemu-virgl-deps/" }
     resource("egl-optional-patch").stage { cp "egl-optional.patch", "#{share}/qemu-virgl-deps/" }
 
-    # Install egl-optional.patch to share directory
-    (share/"qemu-virgl-deps").install "patches/egl-optional.patch"
-
     # Now build and install the appropriate libepoxy version
     if build.with? "opengl-core"
       # OpenGL Core build
