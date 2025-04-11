@@ -1,4 +1,4 @@
- #!/bin/bash
+#!/bin/bash
   set -e
 
   # Script to compile QEMU with virgl support
@@ -8,15 +8,26 @@
     exit 1
   fi
 
+  # Find the path to the Homebrew prefix by looking at this script's location
+  SCRIPT_PATH="$(dirname "$(realpath "$0")")"
+  HOMEBREW_PREFIX="$(dirname "$(dirname "$SCRIPT_PATH")")"
+  
+  # Derive paths for binaries and patches
+  ADD_OPTION="$HOMEBREW_PREFIX/bin/add-opengl-core-option"
+  APPLY_PATCH="$HOMEBREW_PREFIX/bin/apply-headers-patch"
+  QEMU_VIRGL_LIB="$HOMEBREW_PREFIX/lib/qemu-virgl"
+  QEMU_VIRGL_INCLUDE="$HOMEBREW_PREFIX/include/qemu-virgl"
+  PATCH_DIR="$HOMEBREW_PREFIX/share/qemu-virgl-deps"
+  
   cd "$QEMU_SRC"
   
-  # Apply patches first if using OpenGL Core
-  if [ "#{build.with?("opengl-core") ? "true" : "false"}" = "true" ]; then
+  # Check if we should use OpenGL Core
+  if [ -f "$ADD_OPTION" ] && [ -f "$APPLY_PATCH" ]; then
     echo "===== Adding OpenGL Core option to QEMU meson build ====="
-    #{opt_bin}/add-opengl-core-option "$QEMU_SRC"
+    "$ADD_OPTION" "$QEMU_SRC"
     
     echo "===== Applying EGL headers patch for OpenGL Core ====="
-    #{opt_bin}/apply-headers-patch "$QEMU_SRC"
+    "$APPLY_PATCH" "$QEMU_SRC"
     
     # Verify the option was added
     if grep -q "option('opengl_core'" meson_options.txt; then
@@ -34,15 +45,15 @@
   cd build
   
   # Set up environment
-  export PKG_CONFIG_PATH="#{opt_lib}/qemu-virgl/pkgconfig:$PKG_CONFIG_PATH"
+  export PKG_CONFIG_PATH="$QEMU_VIRGL_LIB/pkgconfig:$PKG_CONFIG_PATH"
   
   # Configure with appropriate options
   echo "===== Configuring QEMU ====="
   ../configure --prefix=/usr/local \\
     --enable-opengl \\
     --enable-virglrenderer \\
-    --extra-cflags="-I#{opt_include}/qemu-virgl" \\
-    --extra-ldflags="-L#{opt_lib}/qemu-virgl" \\
+    --extra-cflags="-I$QEMU_VIRGL_INCLUDE" \\
+    --extra-ldflags="-L$QEMU_VIRGL_LIB" \\
     $OPENGL_FLAGS
 
   echo "===== QEMU configured successfully ====="
